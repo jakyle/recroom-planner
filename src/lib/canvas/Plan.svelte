@@ -12,6 +12,7 @@
   import { formatLength } from '../geom/units';
   import { propsOf, type ObjectRow } from '../model/types';
   import { sceneBox, mergedBox, polyPoints, pointsToPath } from './scene';
+  import type { Peer } from '../realtime/collab.svelte';
 
   import type { Underlay } from '../supabase/settings';
 
@@ -22,7 +23,8 @@
     canEdit,
     underlay = null,
     underlayUrl = '',
-  }: { store: DocumentStore; viewport: Viewport; ui: CanvasUi; canEdit: boolean; underlay?: Underlay | null; underlayUrl?: string } = $props();
+    peers = [],
+  }: { store: DocumentStore; viewport: Viewport; ui: CanvasUi; canEdit: boolean; underlay?: Underlay | null; underlayUrl?: string; peers?: Peer[] } = $props();
 
   const tools: Record<ToolName, Tool> = {
     select: new SelectTool(),
@@ -54,6 +56,7 @@
   const objects = $derived(store.orderedObjects());
   const selected = $derived(store.selectedObjects());
   const selBox = $derived(selectionBox(selected, ui.preview));
+  const livePeers = $derived(peers.filter((p) => p.scenarioId === store.scenarioId));
   const fontPx = $derived(11 / scale);
   const handleSize = $derived(8 / scale);
 
@@ -266,6 +269,8 @@
   onwheel={onWheel}
   oncontextmenu={onContextMenu}
   ondblclick={onDblClick}
+  onpointerenter={() => (ui.cursorInside = true)}
+  onpointerleave={() => (ui.cursorInside = false)}
   role="application"
   aria-label="Plan view"
 >
@@ -381,7 +386,7 @@
     {#each objects as o (o.id)}
       {@const layer = store.layers.get(o.layer_id)}
       {#if layer && store.isLayerVisible(layer.id)}
-        {@const b = mergedBox(o, ui.preview)}
+        {@const b = mergedBox(o, ui.preview, ui.remotePreview)}
         {@const props = propsOf(o)}
         {@const color = layer.color}
         {@const isSel = store.selection.has(o.id)}
@@ -419,6 +424,9 @@
               <text transform={`translate(${b.w / 2} ${b.d / 2}) ${textFlip(b.rot)}`} font-size={fontPx} fill="var(--ink)" text-anchor="middle" dominant-baseline="middle" font-family="var(--font-ui)">{o.name}</text>
             {/if}
           {/if}
+          {#if store.unsynced.has(o.id)}
+            <circle data-test="unsynced-dot" cx={b.w} cy={b.d} r={4 / scale} fill="var(--warn)" stroke="var(--surface)" stroke-width={1 / scale} />
+          {/if}
         </g>
       {/if}
     {/each}
@@ -447,6 +455,16 @@
     {#if selBox && selected.length > 1}
       <rect x={selBox.minX} y={selBox.minY} width={selBox.maxX - selBox.minX} height={selBox.maxY - selBox.minY} fill="none" stroke="var(--blueprint)" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" />
     {/if}
+    {#each livePeers as p (p.userId + '-sel')}
+      {@const picked = p.selection.map((id) => store.objects.get(id)).filter((o): o is ObjectRow => !!o && store.isLayerVisible(o.layer_id))}
+      {#each picked as o (o.id)}
+        <polygon data-test="peer-selection" data-user={p.userId} points={polyPoints(footprint(mergedBox(o, ui.preview, ui.remotePreview)))} fill="none" stroke={p.color} stroke-width="1.2" stroke-dasharray="4 2" vector-effect="non-scaling-stroke" />
+      {/each}
+      {#if picked.length > 0}
+        {@const tagBox = selectionBox(picked.map((o) => ({ ...o, ...mergedBox(o, ui.preview, ui.remotePreview) })), ui.preview)!}
+        <text transform={`translate(${tagBox.minX} ${tagBox.maxY + 4 / scale}) scale(1,-1)`} font-size={fontPx * 0.8} fill={p.color} font-family="var(--font-ui)">{p.name}</text>
+      {/if}
+    {/each}
     {#each handles as h (JSON.stringify(h.handle))}
       {#if h.handle.kind === 'rotate'}
         <circle cx={h.at[0]} cy={h.at[1]} r={handleSize / 2} fill="var(--surface)" stroke="var(--blueprint)" vector-effect="non-scaling-stroke" />
@@ -489,6 +507,16 @@
         <circle cx={p[0]} cy={p[1]} r={3 / scale} fill="var(--blueprint)" />
       {/each}
     {/if}
+
+    {#each livePeers as p (p.userId + '-cursor')}
+      {#if p.cursor}
+        <g data-test="peer-cursor" data-user={p.userId} transform={`translate(${p.cursor[0]} ${p.cursor[1]}) scale(${1 / scale} ${-1 / scale})`} style="pointer-events:none">
+          <path d="M0 0 L0 16 L4.5 12 L7.5 19 L10 18 L7 11 L12 11 Z" fill={p.color} stroke="var(--surface)" stroke-width="1" />
+          <rect x="12" y="12" rx="3" width={p.name.length * 6.6 + 10} height="16" fill={p.color} />
+          <text x="17" y="24" font-size="11" fill="#fff" font-family="var(--font-ui)">{p.name}</text>
+        </g>
+      {/if}
+    {/each}
   </g>
 </svg>
 

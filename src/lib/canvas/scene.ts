@@ -12,8 +12,13 @@ export function sceneBox(store: DocumentStore): AABB {
   return aabbUnion(boxes);
 }
 
-export function mergedBox(o: ObjectRow, preview: Map<string, Partial<ObjectRow>>): { x: number; y: number; w: number; d: number; rot: number } {
-  const p = preview.get(o.id);
+/** An object's box with the local preview applied, else a peer's in-flight preview (R15.1). */
+export function mergedBox(
+  o: ObjectRow,
+  preview: Map<string, Partial<ObjectRow>>,
+  remote?: Map<string, Partial<ObjectRow>>,
+): { x: number; y: number; w: number; d: number; rot: number } {
+  const p = preview.get(o.id) ?? remote?.get(o.id);
   return { x: p?.x ?? o.x, y: p?.y ?? o.y, w: p?.w ?? o.w, d: p?.d ?? o.d, rot: p?.rot ?? o.rot };
 }
 

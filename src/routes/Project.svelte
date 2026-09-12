@@ -34,6 +34,9 @@
   import ContextMenu from '../lib/ui/ContextMenu.svelte';
   import ObjectDialog from '../lib/ui/ObjectDialog.svelte';
   import UnderlayPanel from '../lib/ui/UnderlayPanel.svelte';
+  import ActivityPanel from '../lib/ui/ActivityPanel.svelte';
+  import Toast from '../lib/ui/Toast.svelte';
+  import { CollabSession } from '../lib/realtime/collab.svelte';
   import { signedImageUrl } from '../lib/supabase/storage';
   import type { Underlay } from '../lib/supabase/settings';
 
@@ -55,6 +58,7 @@
   let plan = $state<Plan | null>(null);
   let underlay = $state<Underlay | null>(null);
   let underlayUrl = $state('');
+  let collab = $state<CollabSession | null>(null);
 
   $effect(() => {
     const path = underlay?.path;
@@ -98,12 +102,48 @@
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      collab?.stop();
     };
   });
 
   $effect(() => {
     if (scenarioId && me && store.scenarioId !== scenarioId) void store.load(projectId, scenarioId);
   });
+
+  $effect(() => {
+    if (collab && store.scenarioId) collab.setScenario(store.scenarioId);
+  });
+  $effect(() => {
+    const c = ui.cursor;
+    const inside = ui.cursorInside;
+    collab?.sendCursor(inside ? c : null);
+  });
+  $effect(() => {
+    const p = Object.fromEntries(ui.preview);
+    collab?.sendPreview(p);
+  });
+  $effect(() => {
+    const ids = [...store.selection];
+    collab?.sendSelection(ids);
+  });
+  $effect(() => {
+    const scale = viewport.scale;
+    void viewport.tx;
+    void viewport.ty;
+    if (viewport.width === 0) return;
+    const [cx, cy] = viewport.center();
+    collab?.setViewport({ scale, cx, cy });
+  });
+
+  function jumpTo(userId: string) {
+    const v = collab?.peers.get(userId)?.viewport;
+    if (v) viewport.centerOn(v.cx, v.cy, v.scale);
+  }
+
+  function isOnline(userId: string): boolean | null {
+    if (!collab) return null;
+    return userId === me?.user_id || collab.peers.has(userId);
+  }
 
   async function load() {
     error = '';
@@ -120,6 +160,11 @@
       underlay = ((project.settings as Record<string, unknown>)?.underlay as Underlay | undefined) ?? null;
       scenarios = await listScenarios(projectId);
       members = await listMembers(projectId);
+      store.userId = me.user_id;
+      store.nameOf = (id) => members.find((m) => m.user_id === id)?.display_name || 'someone';
+      store.onWritten = (op, stored) => collab?.announce(op, stored);
+      collab = new CollabSession(projectId, store, ui, { user_id: me.user_id, name: me.display_name || 'Anonymous', color: me.color });
+      void collab.start();
       if (!scenarioId) {
         const primary = scenarios.find((s) => s.is_primary) ?? scenarios[0];
         if (primary) navigate({ name: 'project', projectId, scenarioId: primary.id });
@@ -134,6 +179,7 @@
     await setDisplayName(projectId, nameDraft);
     me = await myMembership(projectId);
     members = await listMembers(projectId);
+    if (me) collab?.setIdentity(me.display_name || 'Anonymous', me.color);
   }
 
   async function saveProjectName() {
@@ -212,12 +258,22 @@
       {#snippet people()}
         <span class="avatars">
           {#each members as m (m.user_id)}
-            <Avatar name={m.display_name || '?'} color={m.color} title={`${m.display_name || 'unnamed'} · ${m.access}`} />
+            {@const online = isOnline(m.user_id)}
+            <Avatar
+              name={m.display_name || '?'}
+              color={m.color}
+              {online}
+              title={`${m.display_name || 'unnamed'} · ${m.access}${online ? ' · online (click to see their view)' : online === false ? ' · away' : ''}`}
+              onclick={() => jumpTo(m.user_id)}
+            />
           {/each}
         </span>
         {#if me?.display_name}<span class="mono" data-test="my-name" style={`color:${me.color}`}>{me.display_name}</span>{/if}
       {/snippet}
       {#snippet actions()}
+        {#if collab && collab.budgetFraction >= 0.5}
+          <span class="chip chip--warn" data-test="rt-budget" title={`≈${collab.budgetEstimate.toLocaleString()} realtime messages/month projected from this browser (free tier 2,000,000)`}>realtime {Math.round(collab.budgetFraction * 100)}%</span>
+        {/if}
         <span class={`chip chip--${me?.access}`} data-test="my-access">{me?.access}</span>
         <button class="btn btn--quiet btn--sm" title="Undo (Ctrl+Z)" disabled={!canEdit || store.undoStack.length === 0} onclick={() => store.undo()}>↶</button>
         <button class="btn btn--quiet btn--sm" title="Redo (Ctrl+Shift+Z)" disabled={!canEdit || store.redoStack.length === 0} onclick={() => store.redo()}>↷</button>
@@ -244,7 +300,7 @@
 
       <div class="paper paper--canvas">
         {#if scenarioId && !store.loading && store.scenarioId === scenarioId}
-          <Plan bind:this={plan} {store} {viewport} {ui} {canEdit} {underlay} {underlayUrl} />
+          <Plan bind:this={plan} {store} {viewport} {ui} {canEdit} {underlay} {underlayUrl} peers={collab ? [...collab.peers.values()] : []} />
         {:else}
           <div class="paper__note"><strong>{current?.name ?? project.name}</strong>loading plan…</div>
         {/if}
@@ -302,6 +358,8 @@
             </ul>
           </Panel>
 
+          <ActivityPanel {store} {viewport} {projectId} scenarioId={scenarioId ?? ''} {members} />
+
           {#if isOwner}
             <Panel title="Share links" testId="share-panel">
               {#each kinds as kind (kind)}
@@ -350,10 +408,11 @@
       </aside>
     </div>
 
-    <StatusStrip live="online" access={me.access} {ui} {viewport} {store} />
+    <StatusStrip live={collab?.status ?? 'connecting'} offlineLabel="offline collaboration" access={me.access} {ui} {viewport} {store} />
     <HoverCard {store} {ui} />
     <ContextMenu {store} {ui} {canEdit} />
     <ObjectDialog {store} {ui} />
+    <Toast {store} />
   </div>
 {:else}
   <div class="page">

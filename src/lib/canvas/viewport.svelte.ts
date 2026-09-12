@@ -59,6 +59,19 @@ export class Viewport {
     this.persist();
   }
 
+  /** World point under the middle of the canvas. */
+  center(): Pt {
+    return this.toWorld(this.width / 2, this.height / 2);
+  }
+
+  /** Jump so `cx,cy` sits mid-canvas at `scale` (R15.13 jump-to-viewport). */
+  centerOn(cx: number, cy: number, scale = this.scale): void {
+    this.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+    this.tx = this.width / 2 - cx * this.scale;
+    this.ty = this.height / 2 + cy * this.scale;
+    this.persist();
+  }
+
   visibleWorld(): AABB {
     const [x0, y1] = this.toWorld(0, 0);
     const [x1, y0] = this.toWorld(this.width, this.height);

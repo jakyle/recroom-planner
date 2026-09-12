@@ -7,12 +7,14 @@
 
   let {
     live = 'offline',
+    offlineLabel = 'offline',
     access = '',
     ui = null,
     viewport = null,
     store = null,
   }: {
     live?: 'online' | 'offline' | 'connecting';
+    offlineLabel?: string;
     access?: string;
     ui?: CanvasUi | null;
     viewport?: Viewport | null;
@@ -39,8 +41,8 @@
   {#if store && store.unsynced.size > 0}<span class="status__warn" data-test="status-unsynced">{store.unsynced.size} unsaved</span>{/if}
   {#if store && store.pendingWrites > 0}<span class="muted">saving…</span>{/if}
   {#if access}<span>{access}</span>{/if}
-  <span>
-    <span class={`dot ${live === 'online' ? 'dot--ok' : live === 'connecting' ? 'dot--warn' : ''}`}></span>{live}
+  <span data-test="status-live">
+    <span class={`dot ${live === 'online' ? 'dot--ok' : live === 'connecting' ? 'dot--warn' : ''}`}></span>{live === 'offline' ? offlineLabel : live}
   </span>
   <button class="btn btn--quiet btn--sm" onclick={cycleTheme}>{themeLabel}</button>
 </footer>

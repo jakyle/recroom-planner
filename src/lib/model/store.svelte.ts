@@ -6,6 +6,7 @@ import { aabb, footprint, type AABB } from '../geom/transform';
 
 export type LayerUi = { visible: boolean; opacity: number };
 export type SelectMode = 'replace' | 'toggle' | 'add';
+export type Notice = { id: number; text: string; action?: { label: string; run: () => void } };
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -41,6 +42,18 @@ export class DocumentStore {
   undoStack = $state<Batch[]>([]);
   redoStack = $state<Batch[]>([]);
   pendingWrites = $state(0);
+  notices = $state<Notice[]>([]);
+  /** Bumped after every successful own write and every applied remote row; panels refetch on it. */
+  revision = $state(0);
+  userId: string | null = null;
+  nameOf: (userId: string | null | undefined) => string = () => 'someone';
+  /** Called after each successful write (stored row) or delete (null) so the session can broadcast `committed`/`deleted` (R15.7). */
+  onWritten: ((op: Op, stored: Row | null) => void) | null = null;
+  retryDelays = [500, 1500, 3500];
+  private inflight = new Map<string, number>();
+  private deferred = new Map<string, { table: TableName; row: Row; deleted: boolean }>();
+  private failed: Op[] = [];
+  private noticeSeq = 0;
 
   constructor(private repo: Repo) {}
 
@@ -208,40 +221,181 @@ export class DocumentStore {
     }
   }
 
+  private inScope(table: TableName, row: Row): boolean {
+    switch (table) {
+      case 'layers':
+        return row.project_id === this.projectId;
+      case 'walls':
+        return row.scenario_id === this.scenarioId || (row.scope === 'shell' && row.project_id === this.projectId);
+      case 'openings':
+        return this.walls.has(row.wall_id as string);
+      default:
+        return row.scenario_id === this.scenarioId;
+    }
+  }
+
+  private rowKey(table: TableName, row: Row): string {
+    return table === 'scenario_wall_states' ? `${row.scenario_id}:${row.wall_id}` : (row.id as string);
+  }
+
+  /** Apply a peer's row when it is newer than ours (LWW per row, R15.7, R15.9). Never touches the undo stack. */
+  applyRemote(table: TableName, row: Row): boolean {
+    if (!this.inScope(table, row)) return false;
+    const id = this.rowKey(table, row);
+    if (this.inflight.has(id)) {
+      this.deferred.set(id, { table, row, deleted: false });
+      return false;
+    }
+    if (table === 'scenario_wall_states') {
+      this.demoWalls.add(row.wall_id as string);
+      this.revision += 1;
+      return true;
+    }
+    if (table === 'slabs') {
+      if (((this.slab?.version as number | undefined) ?? 0) >= ((row.version as number) ?? 0)) return false;
+      this.slab = { ...(this.slab ?? {}), ...row } as SlabRow;
+      this.revision += 1;
+      return true;
+    }
+    const map = this.table(table);
+    const cur = map.get(id);
+    if (cur && ((cur.version as number) ?? 0) >= ((row.version as number) ?? 0)) return false;
+    map.set(id, cur ? { ...cur, ...row } : row);
+    if (table === 'layers' && !this.layerUi.has(id)) this.layerUi.set(id, { visible: true, opacity: 1 });
+    this.revision += 1;
+    return true;
+  }
+
+  /** Drop a row a peer deleted (postgres DELETE payloads carry only the key). */
+  removeRemote(table: TableName, id: string, row: Row = {}): boolean {
+    const key = table === 'scenario_wall_states' ? this.rowKey(table, row) : id;
+    if (this.inflight.has(key)) {
+      this.deferred.set(key, { table, row: { ...row, id }, deleted: true });
+      return false;
+    }
+    if (table === 'scenario_wall_states') {
+      if (row.scenario_id !== this.scenarioId) return false;
+      this.demoWalls.delete(row.wall_id as string);
+    } else if (table === 'slabs') {
+      if (!this.slab || this.slab.id !== id) return false;
+      this.slab = null;
+    } else {
+      const map = this.table(table);
+      if (!map.has(id)) return false;
+      map.delete(id);
+      this.selection.delete(id);
+    }
+    this.revision += 1;
+    return true;
+  }
+
+  private applyDeferred(id: string): void {
+    const d = this.deferred.get(id);
+    if (!d) return;
+    this.deferred.delete(id);
+    if (d.deleted) this.removeRemote(d.table, d.row.id as string, d.row);
+    else this.applyRemote(d.table, d.row);
+  }
+
+  /** Refetch the scenario and diff it into the store, keeping rows with unsaved or in-flight local changes (R15.8). */
+  async refresh(): Promise<void> {
+    if (!this.projectId || !this.scenarioId) return;
+    const data = await this.repo.load(this.projectId, this.scenarioId);
+    const keep = (id: string) => this.unsynced.has(id) || this.inflight.has(id);
+    const sync = (map: SvelteMap<string, Row>, rows: Row[]) => {
+      const ids = new Set(rows.map((r) => r.id as string));
+      for (const id of [...map.keys()]) {
+        if (ids.has(id) || keep(id)) continue;
+        map.delete(id);
+        this.selection.delete(id);
+      }
+      for (const r of rows) {
+        const id = r.id as string;
+        if (keep(id)) continue;
+        const cur = map.get(id);
+        if (!cur || ((cur.version as number) ?? 0) < ((r.version as number) ?? 0)) map.set(id, cur ? { ...cur, ...r } : r);
+      }
+    };
+    sync(this.table('layers'), data.layers);
+    sync(this.table('walls'), data.walls);
+    sync(this.table('openings'), data.openings);
+    sync(this.table('object_groups'), data.groups);
+    sync(this.table('objects'), data.objects);
+    const demo = new Set(data.wallStates.map((s) => s.wall_id as string));
+    for (const id of [...this.demoWalls]) if (!demo.has(id)) this.demoWalls.delete(id);
+    for (const id of demo) this.demoWalls.add(id);
+    const slab = data.slab as SlabRow | null;
+    if (!slab) this.slab = null;
+    else if (!this.slab || (this.slab.version ?? 0) < (slab.version ?? 0)) this.slab = slab;
+    for (const id of this.layers.keys()) if (!this.layerUi.has(id)) this.layerUi.set(id, { visible: true, opacity: 1 });
+    this.revision += 1;
+  }
+
   static inverse(op: Op): Op {
     if (op.type === 'create') return { type: 'delete', table: op.table, id: op.row.id as string, row: op.row };
     if (op.type === 'delete') return { type: 'create', table: op.table, row: op.row };
     return { type: 'update', table: op.table, id: op.id, before: op.after, after: op.before };
   }
 
-  private async write(op: Op): Promise<void> {
+  private opId(op: Op): string {
+    if (op.table === 'scenario_wall_states') {
+      const r = op.type === 'update' ? op.after : op.row;
+      return `${r.scenario_id}:${r.wall_id}`;
+    }
+    return op.type === 'create' ? (op.row.id as string) : op.id;
+  }
+
+  private async write(op: Op): Promise<Row | null> {
     if (op.table === 'scenario_wall_states') {
       if (op.type === 'delete') await this.repo.removeWallState(this.scenarioId, op.row.wall_id as string);
       else await this.repo.insert('scenario_wall_states', op.type === 'create' ? op.row : op.after);
-      return;
+      return null;
     }
-    if (op.type === 'create') {
-      const stored = await this.repo.insert(op.table, op.row);
-      if (op.table === 'slabs') this.slab = stored as SlabRow;
-      else {
-        const map = this.table(op.table);
-        const cur = map.get(op.row.id as string);
-        if (cur) map.set(op.row.id as string, { ...cur, ...stored });
+    if (op.type === 'create') return this.repo.insert(op.table, op.row);
+    if (op.type === 'update') return this.repo.update(op.table, op.id, op.after);
+    await this.repo.remove(op.table, op.id);
+    return null;
+  }
+
+  /** Three retries with backoff before giving up (R15.10). */
+  private async writeWithRetry(op: Op): Promise<Row | null> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.write(op);
+      } catch (e) {
+        if (attempt >= this.retryDelays.length) throw e;
+        await new Promise((r) => setTimeout(r, this.retryDelays[attempt]));
       }
-    } else if (op.type === 'update') {
-      const stored = await this.repo.update(op.table, op.id, op.after);
-      if (op.table === 'slabs') this.slab = { ...(this.slab ?? {}), ...stored } as SlabRow;
-      else {
-        const map = this.table(op.table);
-        const cur = map.get(op.id);
-        if (cur) map.set(op.id, { ...cur, version: stored.version, updated_at: stored.updated_at, updated_by: stored.updated_by });
-      }
-    } else {
-      await this.repo.remove(op.table, op.id);
     }
   }
 
-  /** Apply locally, record for undo, then persist. Never awaits before the local apply (R7.10). */
+  /** Fold the stored row back in: the whole row once no other write for it is in flight, else only the version fields. */
+  private absorb(op: Op, stored: Row | null, last: boolean): void {
+    if (!stored || op.type === 'delete') return;
+    op.version = stored.version as number;
+    const patch = last ? stored : { version: stored.version, updated_at: stored.updated_at, updated_by: stored.updated_by };
+    if (op.table === 'slabs') {
+      this.slab = { ...(this.slab ?? {}), ...patch } as SlabRow;
+      return;
+    }
+    if (op.table === 'scenario_wall_states') return;
+    const id = op.type === 'create' ? (op.row.id as string) : op.id;
+    const map = this.table(op.table);
+    const cur = map.get(id);
+    if (cur) map.set(id, { ...cur, ...patch });
+  }
+
+  notify(text: string, action?: Notice['action']): number {
+    const id = ++this.noticeSeq;
+    this.notices = [...this.notices, { id, text, action }];
+    return id;
+  }
+
+  dismiss(id: number): void {
+    this.notices = this.notices.filter((n) => n.id !== id);
+  }
+
+  /** Apply locally, record for undo, then persist with retries. Never awaits before the local apply (R7.10, R15.6, R15.10). */
   async commit(batch: Batch, record = true): Promise<void> {
     if (batch.ops.length === 0) return;
     for (const op of batch.ops) this.applyLocal(op);
@@ -251,25 +405,56 @@ export class DocumentStore {
     }
     this.pendingWrites += batch.ops.length;
     for (const op of batch.ops) {
-      const id = op.type === 'create' ? (op.row.id as string) : op.id;
+      const id = this.opId(op);
+      this.inflight.set(id, (this.inflight.get(id) ?? 0) + 1);
+      let stored: Row | null = null;
+      let ok = false;
       try {
-        await this.write(op);
+        stored = await this.writeWithRetry(op);
+        ok = true;
         this.unsynced.delete(id);
       } catch (e) {
         this.unsynced.add(id);
-        this.error = `Save failed: ${String((e as Error).message ?? e)}`;
+        this.failed.push(op);
+        this.notify(`Save failed: ${String((e as Error).message ?? e)}`, { label: 'Retry', run: () => void this.retryFailed() });
       } finally {
         this.pendingWrites -= 1;
+        const n = (this.inflight.get(id) ?? 1) - 1;
+        const last = n <= 0;
+        if (last) this.inflight.delete(id);
+        else this.inflight.set(id, n);
+        if (ok) {
+          this.absorb(op, stored, last);
+          this.revision += 1;
+          this.onWritten?.(op, stored);
+        }
+        if (last) this.applyDeferred(id);
       }
     }
+  }
+
+  /** Re-run every write that exhausted its retries (the toast's Retry button). */
+  async retryFailed(): Promise<void> {
+    const ops = this.failed;
+    this.failed = [];
+    this.notices = this.notices.filter((n) => n.action?.label !== 'Retry');
+    await this.commit({ label: 'retry', ops }, false);
   }
 
   async undo(): Promise<void> {
     const batch = this.undoStack.at(-1);
     if (!batch) return;
     this.undoStack = this.undoStack.slice(0, -1);
+    const over = new Set<string>();
+    for (const op of batch.ops) {
+      if (op.type === 'delete' || op.version === undefined) continue;
+      const id = op.type === 'create' ? (op.row.id as string) : op.id;
+      const cur = op.table === 'slabs' ? (this.slab as Row | null) : op.table === 'scenario_wall_states' ? null : this.table(op.table).get(id);
+      if (cur && cur.version !== op.version && cur.updated_by && cur.updated_by !== this.userId) over.add(this.nameOf(cur.updated_by as string));
+    }
     const inverse: Batch = { label: `undo ${batch.label}`, ops: [...batch.ops].reverse().map(DocumentStore.inverse) };
     this.redoStack = [...this.redoStack, batch];
+    if (over.size) this.notify(`Undid over ${[...over].join(', ')}'s newer change`);
     await this.commit(inverse, false);
   }
 

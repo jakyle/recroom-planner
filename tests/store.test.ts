@@ -92,14 +92,108 @@ describe('DocumentStore', () => {
     expect(store.objects.get('O1')?.name).toBe('Sofa');
   });
 
-  it('flags unsynced rows when a write fails', async () => {
+  it('flags unsynced rows and toasts Retry when a write fails', async () => {
+    store.retryDelays = [0, 0, 0];
     repo.update = async () => {
       throw new Error('boom');
     };
     await store.updateObjects(['O1'], () => ({ x: 5 }));
     expect(store.objects.get('O1')?.x).toBe(5);
     expect(store.unsynced.has('O1')).toBe(true);
-    expect(store.error).toContain('boom');
+    expect(store.notices[0].text).toContain('boom');
+    expect(store.notices[0].action?.label).toBe('Retry');
+  });
+
+  it('applyRemote is last-writer-wins by version and never records undo', () => {
+    expect(store.applyRemote('objects', { id: 'O1', scenario_id: 'S', x: 40, version: 2 })).toBe(false);
+    expect(store.objects.get('O1')?.x).toBe(0);
+    expect(store.applyRemote('objects', { id: 'O1', scenario_id: 'S', x: 40, version: 4 })).toBe(true);
+    expect(store.objects.get('O1')?.x).toBe(40);
+    expect(store.applyRemote('objects', { id: 'O9', scenario_id: 'OTHER', x: 1, version: 1 })).toBe(false);
+    expect(store.objects.has('O9')).toBe(false);
+    expect(store.undoStack.length).toBe(0);
+    store.removeRemote('objects', 'O1');
+    expect(store.objects.has('O1')).toBe(false);
+  });
+
+  it('refresh diffs the refetched scenario in but keeps unsynced rows', async () => {
+    const mine = store.newObject({ id: 'MINE', name: 'Mine', w: 10, d: 10, h: 10 });
+    store.objects.set('MINE', mine);
+    store.unsynced.add('MINE');
+    repo.load = async () => ({
+      layers: [
+        { id: 'L1', project_id: 'P', key: 'walls', name: 'Walls', color: '#000', sort: 0, builtin: true, locked: false, version: 1 },
+        { id: 'L2', project_id: 'P', key: 'furnishing', name: 'Furnishing', color: '#777', sort: 8, builtin: true, locked: false, version: 1 },
+      ],
+      walls: [],
+      openings: [],
+      groups: [],
+      wallStates: [],
+      slab: null,
+      objects: [
+        { id: 'O1', scenario_id: 'S', layer_id: 'L2', name: 'Sofa moved', x: 99, y: 0, z: 0, w: 84, d: 38, h: 34, rot: 0, mount: 'floor', wall_id: null, group_id: null, z_order: 1, tags: [], image_path: null, halo: null, locked: false, props: {}, version: 7 },
+        { id: 'NEW', scenario_id: 'S', layer_id: 'L2', name: 'New', x: 1, y: 1, z: 0, w: 1, d: 1, h: 1, rot: 0, mount: 'floor', wall_id: null, group_id: null, z_order: 2, tags: [], image_path: null, halo: null, locked: false, props: {}, version: 1 },
+      ],
+    });
+    await store.refresh();
+    expect(store.objects.get('O1')?.x).toBe(99);
+    expect(store.objects.has('NEW')).toBe(true);
+    expect(store.objects.has('MINE')).toBe(true);
+  });
+
+  it('retries a failing write with backoff, then toasts with Retry and keeps the row unsynced', async () => {
+    store.retryDelays = [0, 0, 0];
+    let attempts = 0;
+    repo.update = async (table, id, patch) => {
+      attempts += 1;
+      if (attempts < 5) throw new Error('flaky');
+      return { id, ...patch, version: 50 };
+    };
+    await store.updateObjects(['O1'], () => ({ x: 7 }));
+    expect(attempts).toBe(4);
+    expect(store.unsynced.has('O1')).toBe(true);
+    expect(store.notices.at(-1)?.action?.label).toBe('Retry');
+    store.notices.at(-1)!.action!.run();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.unsynced.has('O1')).toBe(false);
+    expect(store.objects.get('O1')?.version).toBe(50);
+  });
+
+  it("undo over a peer's newer change toasts with their name", async () => {
+    store.userId = 'me';
+    store.nameOf = (id) => (id === 'peer' ? 'Bob' : 'someone');
+    repo.update = async (table, id, patch) => ({ id, ...patch, version: 4, updated_by: 'me' });
+    await store.updateObjects(['O1'], () => ({ x: 120 }), 'move');
+    store.applyRemote('objects', { id: 'O1', scenario_id: 'S', x: 200, version: 5, updated_by: 'peer' });
+    await store.undo();
+    expect(store.objects.get('O1')?.x).toBe(0);
+    expect(store.notices.at(-1)?.text).toBe("Undid over Bob's newer change");
+  });
+
+  it('undo over my own later change is silent', async () => {
+    store.userId = 'me';
+    let v = 3;
+    repo.update = async (table, id, patch) => ({ id, ...patch, version: ++v, updated_by: 'me' });
+    await store.updateObjects(['O1'], () => ({ x: 120 }), 'move');
+    await store.updateObjects(['O1'], () => ({ name: 'Couch' }), 'rename');
+    await store.undo();
+    await store.undo();
+    expect(store.notices.length).toBe(0);
+  });
+
+  it('applies a deferred remote row once the in-flight write lands', async () => {
+    let release: (v: unknown) => void = () => {};
+    repo.update = async (table, id, patch) => {
+      await new Promise((r) => (release = r));
+      return { id, ...patch, version: 4 };
+    };
+    const p = store.updateObjects(['O1'], () => ({ x: 10 }), 'move');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.applyRemote('objects', { id: 'O1', scenario_id: 'S', name: 'Peer', version: 9 })).toBe(false);
+    release(null);
+    await p;
+    expect(store.objects.get('O1')?.name).toBe('Peer');
+    expect(store.objects.get('O1')?.version).toBe(9);
   });
 
   it('groups select together and ungroup clears', async () => {

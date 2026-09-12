@@ -14,8 +14,8 @@ export type TableName = 'objects' | 'object_groups' | 'walls' | 'openings' | 'sc
 export type Row = Record<string, unknown>;
 
 export type Op =
-  | { type: 'create'; table: TableName; row: Row }
-  | { type: 'update'; table: TableName; id: string; before: Row; after: Row }
+  | { type: 'create'; table: TableName; row: Row; version?: number }
+  | { type: 'update'; table: TableName; id: string; before: Row; after: Row; version?: number }
   | { type: 'delete'; table: TableName; id: string; row: Row };
 
 export type Batch = { ops: Op[]; label: string };

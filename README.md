@@ -39,3 +39,15 @@ P0 rows, run against the live URL:
 6. Rotate the edit link → the old link shows "invalid link". (R3.4)
 7. Fork "Base" as "Option A" → appears in the list; Promote it → star moves. (R19.6)
 8. Owner clicks Link Google (once the provider is configured) → returns signed in with Google, still owner. (R2.4, R3.8)
+
+P2 rows (two browser profiles on the edit link, automated in `e2e/realtime.spec.ts`):
+
+12. Both profiles show two ringed (online) avatars; moving the mouse in B shows a cursor with B's name in A. (R15.1, R15.3, R15.13)
+13. Drag an object in A: B shows it moving before the mouse is released, then at the committed spot. (R15.1, R15.2, R15.7)
+14. Click an object in B: A shows B's colored dashed outline and name. (R15.13)
+15. Click B's avatar in A: A's view jumps to B's viewport once. (R15.13)
+16. Set the same object's x in both profiles at the same time: both end on the later value. (R15.9)
+17. Turn off B's network, move the object in A, turn B's network back on: B refetches and shows the new spot; the status strip read "offline collaboration" meanwhile. (R15.5, R15.8)
+18. Edit in A, undo in A after B changed the same object: toast "Undid over B's newer change". (R15.11)
+19. Project tab › Activity lists the last commits with names; clicking a row zooms to it. (R15.14)
+20. With the network blocked during a drag: after retries a toast offers Retry and the object shows an orange dot until it saves. (R15.10)

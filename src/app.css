@@ -163,6 +163,23 @@ code, .mono { font-family: var(--font-mono); font-size: 12px; }
 .chip--owner { color: var(--blueprint); border-color: var(--blueprint); }
 .chip--edit { color: var(--ok); border-color: var(--ok); }
 .chip--view { color: var(--ink-3); }
+.chip--warn { color: var(--warn); border-color: var(--warn); }
+
+.avatar--online { box-shadow: 0 0 0 2px var(--ok); }
+.avatar--away { opacity: 0.45; }
+button.avatar { cursor: pointer; padding: 0; }
+
+.toasts { position: fixed; right: 16px; bottom: 44px; display: grid; gap: 8px; z-index: 40; max-width: min(420px, calc(100vw - 32px)); }
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--rule); border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.toast > span { flex: 1; }
 
 .avatar {
   width: 22px; height: 22px;

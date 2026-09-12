@@ -7,10 +7,12 @@ export function projectTopic(projectId: string): string {
 }
 
 /** Create the project's private channel with the current session applied to the socket (R2.6). */
-export async function projectChannel(projectId: string): Promise<RealtimeChannel> {
+export async function projectChannel(projectId: string, presenceKey?: string): Promise<RealtimeChannel> {
   const session = await ensureSession();
   await supabase.realtime.setAuth(session.access_token);
-  return supabase.channel(projectTopic(projectId), { config: { private: true } });
+  const config: { private: boolean; presence?: { key: string } } = { private: true };
+  if (presenceKey) config.presence = { key: presenceKey };
+  return supabase.channel(projectTopic(projectId), { config });
 }
 
 export type JoinStatus = 'SUBSCRIBED' | 'CHANNEL_ERROR' | 'TIMED_OUT' | 'CLOSED';

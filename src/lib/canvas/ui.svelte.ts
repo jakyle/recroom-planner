@@ -19,6 +19,9 @@ export class CanvasUi {
   cursor = $state<Pt>([0, 0]);
   readout = $state('');
   preview = new SvelteMap<string, Partial<ObjectRow>>();
+  /** Peers' in-flight drags (R15.1); merged under the local preview, never cleared by the select tool. */
+  remotePreview = new SvelteMap<string, Partial<ObjectRow>>();
+  cursorInside = $state(false);
   marquee = $state<AABB | null>(null);
   marqueeMode = $state<'intersect' | 'enclose'>('intersect');
   guides = $state<Guide[]>([]);

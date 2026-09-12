@@ -9,6 +9,8 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 - **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote public; everything committed and pushed.
 - **Supabase:** migrations 0001–0007 applied to dev (`twpeiaygomaobvshqfvp`, CLI linked) and prod (`rgtegkswqrafdhfifnvt`). Passwords in `C:/Users/jjack/dev/recroom-planner.secrets.local.txt` (outside the repo). `.env` = dev URL + publishable key. GitHub secrets: `VITE_SUPABASE_*` (prod), `E2E_SUPABASE_*` (dev). **Never commit keys.**
 - **Not yet configured:** Google OAuth provider (R2.4/R3.8 stay `[coded]`).
+- **Open user report (2026-09-12):** "why are windows opening like doors?" — could not reproduce (windows render as a wall gap with three lines, only doors get swing arcs; see `test-results/overview.png` if present). Asked which opening; no answer yet. If it comes up, ask for the label (W1–W14) or a screenshot before changing `Plan.svelte` opening symbols.
+- **Code-review gate (R22.1):** the user was asked twice whether to run the code-reviewer over P0+P1 and has not answered. Next agent: ask once in plain text as the first message, then start P2 either way.
 - **Plans:** `docs/plans/2026-09-12-p0-foundation-plan.md` (done), `docs/plans/2026-09-12-p1-canvas-plan.md` (done; Task 12's e2e is `e2e/canvas.spec.ts`).
 
 ## Distilled context (already read the sources; this is what bites)

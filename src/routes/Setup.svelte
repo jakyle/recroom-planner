@@ -3,6 +3,7 @@
   import { supabase, envOk } from '../lib/supabase/client';
   import { ensureSession } from '../lib/supabase/auth';
   import { listMyProjects } from '../lib/supabase/projects';
+  import { projectChannel, subscribeOnce } from '../lib/supabase/realtime';
 
   type Check = { name: string; status: 'pending' | 'ok' | 'fail' | 'manual'; detail: string };
   let checks = $state<Check[]>([
@@ -42,18 +43,10 @@
         set(3, 'manual', 'create or join a project first');
         return;
       }
-      const ch = supabase.channel(`project:${mine[0].id}`, { config: { private: true } });
-      const status = await new Promise<string>((resolve) => {
-        const t = setTimeout(() => resolve('TIMED_OUT'), 8000);
-        ch.subscribe((s) => {
-          if (s === 'SUBSCRIBED' || s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') {
-            clearTimeout(t);
-            resolve(s);
-          }
-        });
-      });
+      const ch = await projectChannel(mine[0].id);
+      const { status, error: joinError } = await subscribeOnce(ch);
       await supabase.removeChannel(ch);
-      set(3, status === 'SUBSCRIBED' ? 'ok' : 'fail', status);
+      set(3, status === 'SUBSCRIBED' ? 'ok' : 'fail', joinError ?? status);
     } catch (e) {
       set(3, 'fail', String((e as Error).message));
     }

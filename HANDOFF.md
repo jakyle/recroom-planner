@@ -4,11 +4,12 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 
 ## State
 
-- **Next action:** Implement **SPEC §2 + §3 + §19 + §20 (Phase P0 Foundation)** starting with R2.14 (repo scaffold) — Svelte 5 + Vite + TS skeleton per §2.4, then the Supabase migrations for §19.
-- **Done:** SPEC.md (full scope, 256 requirements), CHECKLIST.md (all `[ ]`), this file, napkin. **No code written.**
-- **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote `https://github.com/jakyle/recroom-planner` (**public**, per the user). **Never commit secrets**: Supabase URL/anon key and any service-role key live only in GitHub Actions secrets and an untracked `.env` (R2.3, R20.1); `.gitignore` already excludes `.env*`.
-- **Files:** `SPEC.md`, `CHECKLIST.md`, `HANDOFF.md`, `.claude/napkin.md`, `.gitignore`, `.gitattributes` — all committed and pushed; working tree clean.
-- **§24 confirmed:** the user accepted all 12 additional features (2026-09-12); they are normal requirements in the phase each names.
+- **Next action:** (1) run the code-reviewer over P0 once the user OKs it (R22.1 gate); (2) then implement **SPEC §4 (client model) + §5 (seed) + §6 + §7 + §14 — Phase P1 Canvas core**, starting with R5.17 `seed_pool_room` as migration `0006_seed_pool_room.sql` (read SPEC §5 in full first). A visual-design pass (frontend-design skill, direction proposed to the user 2026-09-12) is folded into P1's UI work.
+- **Done:** P0 Foundation is live at https://jakyle.github.io/recroom-planner/ — schema/RLS/RPCs (migrations 0001–0005) on both Supabase projects, share-link auth, members panel, scenario fork/promote, setup self-check, CI + Pages deploy, e2e (`e2e/access.spec.ts`, `e2e/smoke.spec.ts`) green locally, in CI, and against the live site. 34 checklist lines `[verified]`, 35 `[coded]`.
+- **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote `https://github.com/jakyle/recroom-planner` (public). Everything committed and pushed; working tree clean except this file and CHECKLIST.md after this edit.
+- **Supabase:** org `software-boy`; prod `recroom` ref `rgtegkswqrafdhfifnvt`; dev `recroom-dev` ref `twpeiaygomaobvshqfvp` (CLI is linked to dev). DB passwords: `C:/Users/jjack/dev/recroom-planner.secrets.local.txt` (outside the repo). `.env` (untracked) holds the dev URL + publishable key. GitHub secrets: `VITE_SUPABASE_*` (prod), `E2E_SUPABASE_*` (dev). **Never commit keys.**
+- **Not yet configured:** Google OAuth provider (R2.4/R3.8 stay `[coded]` until the user sets it up in the Supabase dashboard).
+- **Plan for P0:** `docs/plans/2026-09-12-p0-foundation-plan.md` (all tasks executed; Task 0 done by the agent via CLI + config push instead of the dashboard).
 
 ## Distilled context (already read the sources; this is what bites)
 
@@ -20,14 +21,18 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 - Comments anchor to **both** point and object (§17). Grid toggle + three snap modes (§6). Openings snap into walls in 2.5D and elevations are editable (§8).
 - Realtime is two-tier: broadcast for cursors/drags, Postgres on pointer-up; LWW per row; per-user undo only (§15).
 - Free-tier message budget matters: throttle rules in R15.4 are requirements, not suggestions.
+- Live smoke = `$env:PW_BASE_URL='https://jakyle.github.io/recroom-planner/'; npx playwright test e2e/smoke.spec.ts`; local e2e needs the dev server or lets Playwright start it.
+- Realtime private channels need `supabase.realtime.setAuth(token)` before `channel()` — use `projectChannel()` in `src/lib/supabase/realtime.ts`, never raw `supabase.channel` (bit us once: CHANNEL_ERROR).
+- pgcrypto functions must be schema-qualified (`extensions.gen_random_bytes`) in SQL bodies.
+- Playwright `goto('/')` hits the site root on Pages; always `goto('./')` relative to baseURL.
 - User style: ≤3 sentences per reply, one question per turn, describe sketch features by their label and ruler position ("between the 5 and 0 labels"), never by coordinates they haven't seen.
 
 ## Read-on-demand (action → source, mandatory)
 
-- If you scaffold the repo → read SPEC §2.4 and §2.5 first.
+- If you seed the base plan → read SPEC §5 in full and R5.17; coordinates per §0.1; wire `p_template='pool_room'` in `create_project`.
+- If you add a migration → name it `000N_<topic>.sql`, `npx supabase db push` to dev, then to prod (relink), then `npm run db:types`.
 - If you write a migration → read SPEC §4 (whole) and §19 first; every table needs `version/updated_at/updated_by` (R4.33).
 - If you touch auth/join → read SPEC §3 and R19.3–R19.5, R19.11.
-- If you seed the base plan → read SPEC §5 (all of it) and R5.17; coordinates per §0.1.
 - If you build any drag interaction → read SPEC §7.3, §6, and §15.3 (commit pipeline is the only write path).
 - If you add a rule → read SPEC §12.2 (engine contract) then the rule line.
 - If you build sheets/PDF → read SPEC §18.1–§18.2 and R2.10–R2.11.

@@ -20,7 +20,7 @@ Generated 2026-09-12 from every `**Rn.m**` line in SPEC.md (256 requirements). T
 - [coded] R2.4 — Auth: Supabase anonymous sign-in for every visitor, with optional Google sign-in that upgrades (links) the anonymous identity so ownershi...
 - [verified] R2.5 — Durable state: Postgres with Row-Level Security; every policy is membership-based (§19.3). No client-side authorization.
 - [verified] R2.6 — Ephemeral state: Supabase Realtime broadcast + presence on one private channel per project (`project:<id>`), authorized by RLS on `realti...
-- [coded] R2.7 — Files: Supabase Storage bucket `refs` for reference images (§13.5), path-scoped per project, policies membership-based.
+- [verified] R2.7 — Files: Supabase Storage bucket `refs` for reference images (§13.5), path-scoped per project, policies membership-based.
 - [coded] R2.8 — Free-tier budgets are designed to, not discovered: Realtime ≤200 concurrent connections, 2M messages/month → client throttles in §15.2; S...
 
 ## §2.3 Front-end stack
@@ -304,7 +304,7 @@ Generated 2026-09-12 from every `**Rn.m**` line in SPEC.md (256 requirements). T
 - [ ] R13.6 — Tag chips on objects in the inspector and object list; add via typing with autocomplete; bulk-tag a multi-selection; filter the canvas by...
 
 ## §13.5 Reference images
-- [ ] R13.7 — Upload an image (PNG/JPG/WebP, ≤ 5 MB, client-side downscaled to ≤ 2048 px) to an object or preset; stored at `refs/<project>/<uuid>.<ext...
+- [coded] R13.7 — Upload an image (PNG/JPG/WebP, ≤ 5 MB, client-side downscaled to ≤ 2048 px) to an object or preset; stored at `refs/<project>/<uuid>.<ext...
 - [ ] R13.8 — Optional "Show image on plan" renders the image clipped to the footprint at 40% opacity (rugs, pool table felt).
 
 ## §14 Layers
@@ -388,7 +388,7 @@ Generated 2026-09-12 from every `**Rn.m**` line in SPEC.md (256 requirements). T
 ## §19.3 RLS
 - [verified] R19.7 — Helper `is_member(project_id, min_access)`; every table policy: SELECT for `view`+, INSERT/UPDATE/DELETE for `edit`+; `projects` UPDATE a...
 - [verified] R19.8 — `realtime.messages` policy: members may read/write topic `project:<id>` (private channel, `broadcast`+`presence`).
-- [coded] R19.9 — Storage policies on `refs`: path prefix `<project_id>/` readable by members, writable by editors, 5 MB object limit, image MIME only.
+- [verified] R19.9 — Storage policies on `refs`: path prefix `<project_id>/` readable by members, writable by editors, 5 MB object limit, image MIME only.
 - [verified] R19.10 — Anonymous users hold no privileges beyond membership rows they obtained via a token; there is no public SELECT anywhere.
 
 ## §19.4 Abuse limits
@@ -437,10 +437,10 @@ Generated 2026-09-12 from every `**Rn.m**` line in SPEC.md (256 requirements). T
 - [ ] R24.3 — Speaker geometry (P5): a "listening position" object; L/R speakers show the stereo triangle and distances; surround angles per ITU as gui...
 - [ ] R24.4 — Bar-path / barbell halo (P4): rack and bench presets include a 7'-2" barbell halo (plate-loading clearance) in the built-in halo set.
 - [ ] R24.5 — Outlet spacing code hint (P7): NEC-style advisory rule — no point along a wall more than 6' from a 120V receptacle; GFCI flag within 6' o...
-- [ ] R24.6 — Trace mode (P1): import a photo/scan (like the sketch) as a scaled, rotated, semi-transparent underlay locked beneath all layers.
+- [verified] R24.6 — Trace mode (P1): import a photo/scan (like the sketch) as a scaled, rotated, semi-transparent underlay locked beneath all layers.
 - [ ] R24.7 — Mat/tile layout (P6): rubber-mat regions auto-tile from a chosen mat size with cut count and a stagger option.
 - [ ] R24.8 — Wall finishes & drywall/paint quantities (P3): per-wall finish (drywall, paint color, mirror, slat wall) with sqft totals on the working ...
 - [ ] R24.9 — Auto-snapshot (P8): a daily automatic snapshot when the scenario changed, keeping the last 14.
-- [ ] R24.10 — Align & distribute (P1): align left/center/right/top/bottom and distribute evenly for a multi-selection.
+- [verified] R24.10 — Align & distribute (P1): align left/center/right/top/bottom and distribute evenly for a multi-selection.
 - [ ] R24.11 — Room templates (P0): "New project from this project's shell" for planning other rooms later.
-- [coded] R24.12 — Dark mode (P1): theme toggle, exports unaffected.
+- [verified] R24.12 — Dark mode (P1): theme toggle, exports unaffected.

@@ -4,12 +4,12 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 
 ## State
 
-- **Next action:** (1) run the code-reviewer over P0 once the user OKs it (R22.1 gate); (2) then implement **SPEC §4 (client model) + §5 (seed) + §6 + §7 + §14 — Phase P1 Canvas core**, starting with R5.17 `seed_pool_room` as migration `0006_seed_pool_room.sql` (read SPEC §5 in full first). The visual design system landed 2026-09-12 (drafting-table look: `src/app.css` tokens, `src/lib/ui/*` title block / shell / panels / status strip, day+night themes); P1's canvas must live inside `.paper` in `src/routes/Project.svelte` and use these tokens, not new colors.
-- **Done:** Design pass live (R24.12 `[coded]`). P0 Foundation is live at https://jakyle.github.io/recroom-planner/ — schema/RLS/RPCs (migrations 0001–0005) on both Supabase projects, share-link auth, members panel, scenario fork/promote, setup self-check, CI + Pages deploy, e2e (`e2e/access.spec.ts`, `e2e/smoke.spec.ts`) green locally, in CI, and against the live site. 34 checklist lines `[verified]`, 35 `[coded]`.
-- **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote `https://github.com/jakyle/recroom-planner` (public). Everything committed and pushed; working tree clean except this file and CHECKLIST.md after this edit.
-- **Supabase:** org `software-boy`; prod `recroom` ref `rgtegkswqrafdhfifnvt`; dev `recroom-dev` ref `twpeiaygomaobvshqfvp` (CLI is linked to dev). DB passwords: `C:/Users/jjack/dev/recroom-planner.secrets.local.txt` (outside the repo). `.env` (untracked) holds the dev URL + publishable key. GitHub secrets: `VITE_SUPABASE_*` (prod), `E2E_SUPABASE_*` (dev). **Never commit keys.**
-- **Not yet configured:** Google OAuth provider (R2.4/R3.8 stay `[coded]` until the user sets it up in the Supabase dashboard).
-- **Plan for P0:** `docs/plans/2026-09-12-p0-foundation-plan.md` (all tasks executed; Task 0 done by the agent via CLI + config push instead of the dashboard).
+- **Next action:** (1) run the code-reviewer over P0+P1 once the user OKs it (R22.1 gate, asked 2026-09-12, not yet answered); (2) then implement **SPEC §15 — Phase P2 Realtime**: cursors/selection/in-flight drags on the project broadcast channel, `committed` broadcast + `postgres_changes` backstop, reconnect refetch, presence UI, activity feed. Start by reading SPEC §15 in full and `src/lib/model/store.svelte.ts` (`commit()` is where peers' rows get applied) and `src/lib/supabase/realtime.ts` (`projectChannel()` must be used for every channel).
+- **Done:** P1 Canvas core is live at https://jakyle.github.io/recroom-planner/ — seeded shell renders (11 walls, 21 openings), select/marquee/drag/rotate/resize/nudge, snap modes + smart guides, measure, object/text/walkway tools, layers panel, inspector, objects list, hover card, context menu, groups, halos, align/distribute, trace underlay (Supabase Storage), day/night themes. Unit 46 green; e2e `access`, `smoke`, `canvas` green locally and against the live site. Checklist: 63 `[verified]`, 61 `[coded]`, 132 open.
+- **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote public; everything committed and pushed.
+- **Supabase:** migrations 0001–0007 applied to dev (`twpeiaygomaobvshqfvp`, CLI linked) and prod (`rgtegkswqrafdhfifnvt`). Passwords in `C:/Users/jjack/dev/recroom-planner.secrets.local.txt` (outside the repo). `.env` = dev URL + publishable key. GitHub secrets: `VITE_SUPABASE_*` (prod), `E2E_SUPABASE_*` (dev). **Never commit keys.**
+- **Not yet configured:** Google OAuth provider (R2.4/R3.8 stay `[coded]`).
+- **Plans:** `docs/plans/2026-09-12-p0-foundation-plan.md` (done), `docs/plans/2026-09-12-p1-canvas-plan.md` (done; Task 12's e2e is `e2e/canvas.spec.ts`).
 
 ## Distilled context (already read the sources; this is what bites)
 
@@ -25,6 +25,12 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 - Realtime private channels need `supabase.realtime.setAuth(token)` before `channel()` — use `projectChannel()` in `src/lib/supabase/realtime.ts`, never raw `supabase.channel` (bit us once: CHANNEL_ERROR).
 - pgcrypto functions must be schema-qualified (`extensions.gen_random_bytes`) in SQL bodies.
 - Playwright `goto('/')` hits the site root on Pages; always `goto('./')` relative to baseURL.
+- Canvas architecture: `DocumentStore` (reactive maps + op batches, `commit()` applies locally then writes via `Repo`), `Viewport` (px/in, world +y up: `matrix(s 0 0 -s tx ty)`), `CanvasUi` (tool/snap/preview/overlays), tools in `src/lib/canvas/tools/` implement `Tool` (`pointerDown/Move/Up`), `Plan.svelte` renders everything as SVG; keyboard in `src/lib/canvas/keys.ts`.
+- World y is up, so SVG text needs `scale(1,-1)` and door-arc sweep flags are already correct for that frame (verified by measuring arc midpoints = radius from hinge; a screenshot misread once suggested otherwise — measure, don't eyeball).
+- Smart guides: object edges+centers, wall faces edges-only, and only candidates within 120" on the other axis (`applyGuides(..., reach)`); guides override grid snap by design.
+- Object `props` is a DB `Json` column: patch it with `mergeProps(o, patch)` from `src/lib/model/types.ts`, never spread manually (type error).
+- Editors change project settings through the `set_project_setting` RPC (projects UPDATE is owner-only in RLS).
+- A user hook blocks `// ---- section ----` divider comments in written files; write code without them.
 - User style: ≤3 sentences per reply, one question per turn, describe sketch features by their label and ruler position ("between the 5 and 0 labels"), never by coordinates they haven't seen.
 
 ## Read-on-demand (action → source, mandatory)
@@ -36,6 +42,9 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 - If you build any drag interaction → read SPEC §7.3, §6, and §15.3 (commit pipeline is the only write path).
 - If you add a rule → read SPEC §12.2 (engine contract) then the rule line.
 - If you build sheets/PDF → read SPEC §18.1–§18.2 and R2.10–R2.11.
+- If you add realtime (P2) → read SPEC §15 whole, then `src/lib/supabase/realtime.ts`, `src/lib/model/store.svelte.ts` (`commit`, `applyLocal`), and R2.8 budget rules; throttles in R15.4 are requirements.
+- If you touch the canvas → read `src/lib/canvas/Plan.svelte` top-to-bottom first (render order and pointer pipeline) and `src/lib/canvas/tools/select.ts`.
+- If you add an e2e → copy the `toPage`/`drag`/`placeObject` helpers from `e2e/canvas.spec.ts`; always `goto('./')`.
 
 ## Verify
 

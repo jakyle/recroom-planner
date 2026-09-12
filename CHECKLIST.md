@@ -443,4 +443,4 @@ Generated 2026-09-12 from every `**Rn.m**` line in SPEC.md (256 requirements). T
 - [ ] R24.9 — Auto-snapshot (P8): a daily automatic snapshot when the scenario changed, keeping the last 14.
 - [ ] R24.10 — Align & distribute (P1): align left/center/right/top/bottom and distribute evenly for a multi-selection.
 - [ ] R24.11 — Room templates (P0): "New project from this project's shell" for planning other rooms later.
-- [ ] R24.12 — Dark mode (P1): theme toggle, exports unaffected.
+- [coded] R24.12 — Dark mode (P1): theme toggle, exports unaffected.

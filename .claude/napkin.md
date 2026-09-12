@@ -46,3 +46,8 @@ Durable lesson: anything that reads `recroom-planner.secrets.local.txt` inside a
 
 ### 2026-09-12 — `session` is taken in Project.svelte
 `let session` there is the Supabase auth Session; the realtime session is `collab`. Don't reuse the name.
+
+### 2026-09-12 — `npx playwright test | tail` swallows the exit code
+What went wrong: `playwright test 2>&1 | tail -4 && git commit && git push` committed and pushed while one spec had failed (the pipe's status is `tail`'s).
+Correction: run the suite on its own line and read the summary before committing; if chaining, use `set -o pipefail` or check `${PIPESTATUS[0]}`.
+Durable lesson: never put commit/push behind a piped test command.

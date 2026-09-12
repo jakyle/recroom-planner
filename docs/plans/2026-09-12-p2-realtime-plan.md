@@ -44,7 +44,7 @@
 **Files:**
 - Create: `supabase/migrations/0008_realtime_publication.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 -- postgres_changes backstop (R15.7): stream the scenario tables through the supabase_realtime publication.
@@ -62,7 +62,7 @@ begin
 end $$;
 ```
 
-- [ ] **Step 2: Push to dev, then prod, relink dev**
+- [x] **Step 2: Push to dev, then prod, relink dev**
 
 Run (PowerShell, from the repo root; passwords come from the secrets file, never typed):
 
@@ -78,7 +78,7 @@ npm run db:types
 
 Expected: both pushes list `0008_realtime_publication.sql` applied; `git diff --stat src/lib/supabase/database.types.ts` is empty (no schema change).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add supabase/migrations/0008_realtime_publication.sql && git commit -m "feat(db): scenario tables in the realtime publication (R15.7)"
@@ -92,7 +92,7 @@ git add supabase/migrations/0008_realtime_publication.sql && git commit -m "feat
 - Create: `src/lib/realtime/outbox.ts`
 - Test: `tests/realtime/outbox.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -162,12 +162,12 @@ describe('Outbox', () => {
 });
 ```
 
-- [ ] **Step 2: Run, verify it fails**
+- [x] **Step 2: Run, verify it fails**
 
 Run: `npx vitest run tests/realtime/outbox.test.ts`
 Expected: FAIL — cannot resolve `../../src/lib/realtime/outbox`
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 export type Send = (event: string, payload: Record<string, unknown>) => void;
@@ -254,12 +254,12 @@ export class Outbox {
 }
 ```
 
-- [ ] **Step 4: Run, verify it passes**
+- [x] **Step 4: Run, verify it passes**
 
 Run: `npx vitest run tests/realtime/outbox.test.ts`
 Expected: 5 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/realtime/outbox.ts tests/realtime/outbox.test.ts && git commit -m "feat(realtime): coalescing outbox with 15/20 Hz throttles (R15.4)"
@@ -273,7 +273,7 @@ git add src/lib/realtime/outbox.ts tests/realtime/outbox.test.ts && git commit -
 - Create: `src/lib/realtime/budget.ts`
 - Test: `tests/realtime/budget.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -316,12 +316,12 @@ describe('MessageBudget', () => {
 });
 ```
 
-- [ ] **Step 2: Run, verify it fails**
+- [x] **Step 2: Run, verify it fails**
 
 Run: `npx vitest run tests/realtime/budget.test.ts`
 Expected: FAIL — module not found
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 export const FREE_TIER_MESSAGES_PER_MONTH = 2_000_000;
@@ -395,9 +395,9 @@ export class MessageBudget {
 }
 ```
 
-- [ ] **Step 4: Run, verify it passes** — `npx vitest run tests/realtime/budget.test.ts` → 3 passed
+- [x] **Step 4: Run, verify it passes** — `npx vitest run tests/realtime/budget.test.ts` → 3 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/realtime/budget.ts tests/realtime/budget.test.ts && git commit -m "feat(realtime): monthly message budget counter (R15.4, R2.8)"
@@ -412,7 +412,7 @@ git add src/lib/realtime/budget.ts tests/realtime/budget.test.ts && git commit -
 - Modify: `src/lib/model/store.svelte.ts`
 - Test: `tests/store.test.ts`
 
-- [ ] **Step 1: Types.** In `src/lib/model/types.ts` replace the `Op` type:
+- [x] **Step 1: Types.** In `src/lib/model/types.ts` replace the `Op` type:
 
 ```ts
 export type Op =
@@ -421,7 +421,7 @@ export type Op =
   | { type: 'delete'; table: TableName; id: string; row: Row };
 ```
 
-- [ ] **Step 2: Write the failing tests** (append inside the `describe('DocumentStore')` block; also change the existing "flags unsynced rows when a write fails" test to set `store.retryDelays = [0, 0, 0]` first and assert `store.notices[0].text` contains `boom` and `store.notices[0].action?.label` is `Retry` instead of `store.error`):
+- [x] **Step 2: Write the failing tests** (append inside the `describe('DocumentStore')` block; also change the existing "flags unsynced rows when a write fails" test to set `store.retryDelays = [0, 0, 0]` first and assert `store.notices[0].text` contains `boom` and `store.notices[0].action?.label` is `Retry` instead of `store.error`):
 
 ```ts
   it('applyRemote is last-writer-wins by version and never records undo', () => {
@@ -507,9 +507,9 @@ export type Op =
   });
 ```
 
-- [ ] **Step 3: Run, verify they fail** — `npx vitest run tests/store.test.ts` → FAIL (applyRemote/refresh/notices not defined)
+- [x] **Step 3: Run, verify they fail** — `npx vitest run tests/store.test.ts` → FAIL (applyRemote/refresh/notices not defined)
 
-- [ ] **Step 4: Implement in `store.svelte.ts`.** Add after the class fields:
+- [x] **Step 4: Implement in `store.svelte.ts`.** Add after the class fields:
 
 ```ts
 export type Notice = { id: number; text: string; action?: { label: string; run: () => void } };
@@ -771,9 +771,9 @@ Add the remote/refresh methods after `applyLocal`:
 
 Also delete the old `this.error = 'Save failed…'` line (the toast replaces it; `error` stays for load failures).
 
-- [ ] **Step 5: Run, verify it passes** — `npx vitest run tests/store.test.ts` → all passed (existing + 6 new). Then `npm run check` → 0 errors.
+- [x] **Step 5: Run, verify it passes** — `npx vitest run tests/store.test.ts` → all passed (existing + 6 new). Then `npm run check` → 0 errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/model && git add tests/store.test.ts && git commit -m "feat(store): remote apply (LWW), refresh diff, retry with backoff + notices, undo-over-newer toast (R15.7-R15.11)"
@@ -787,7 +787,7 @@ git add src/lib/model && git add tests/store.test.ts && git commit -m "feat(stor
 - Create: `src/lib/realtime/protocol.ts`, `src/lib/realtime/collab.svelte.ts`
 - Modify: `src/lib/supabase/realtime.ts`
 
-- [ ] **Step 1: `protocol.ts`**
+- [x] **Step 1: `protocol.ts`**
 
 ```ts
 import type { Pt } from '../geom/transform';
@@ -808,7 +808,7 @@ export const EVENTS = { cursor: 'cursor', drag: 'drag', select: 'select', commit
 export const PG_TABLES: TableName[] = ['objects', 'object_groups', 'walls', 'openings', 'layers', 'slabs', 'scenario_wall_states'];
 ```
 
-- [ ] **Step 2: `realtime.ts`** — replace `projectChannel`:
+- [x] **Step 2: `realtime.ts`** — replace `projectChannel`:
 
 ```ts
 /** Create the project's private channel with the current session applied to the socket (R2.6). */
@@ -821,7 +821,7 @@ export async function projectChannel(projectId: string, presenceKey?: string): P
 }
 ```
 
-- [ ] **Step 3: `collab.svelte.ts`**
+- [x] **Step 3: `collab.svelte.ts`**
 
 ```ts
 import { SvelteMap } from 'svelte/reactivity';
@@ -1122,9 +1122,9 @@ export class CollabSession {
 }
 ```
 
-- [ ] **Step 4: `npm run check`** → 0 errors (fix any typing of `presenceState<PresenceMeta>()` by casting `as Record<string, PresenceMeta[]>` if needed).
+- [x] **Step 4: `npm run check`** → 0 errors (fix any typing of `presenceState<PresenceMeta>()` by casting `as Record<string, PresenceMeta[]>` if needed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/realtime src/lib/supabase/realtime.ts && git commit -m "feat(realtime): CollabSession — presence, throttled broadcast, committed/deleted, postgres_changes backstop, reconnect refetch (R15.1-R15.8, R15.13)"
@@ -1137,7 +1137,7 @@ git add src/lib/realtime src/lib/supabase/realtime.ts && git commit -m "feat(rea
 **Files:**
 - Modify: `src/lib/canvas/ui.svelte.ts`, `src/lib/canvas/scene.ts`, `src/lib/canvas/viewport.svelte.ts`, `src/lib/canvas/Plan.svelte`
 
-- [ ] **Step 1: `ui.svelte.ts`** — add fields:
+- [x] **Step 1: `ui.svelte.ts`** — add fields:
 
 ```ts
   /** Peers' in-flight drags (R15.1); merged under the local preview, never cleared by the select tool. */
@@ -1145,7 +1145,7 @@ git add src/lib/realtime src/lib/supabase/realtime.ts && git commit -m "feat(rea
   cursorInside = $state(false);
 ```
 
-- [ ] **Step 2: `scene.ts`** — `mergedBox` takes an optional remote map (local wins):
+- [x] **Step 2: `scene.ts`** — `mergedBox` takes an optional remote map (local wins):
 
 ```ts
 export function mergedBox(o: ObjectRow, preview: Map<string, Partial<ObjectRow>>, remote?: Map<string, Partial<ObjectRow>>) {
@@ -1154,7 +1154,7 @@ export function mergedBox(o: ObjectRow, preview: Map<string, Partial<ObjectRow>>
 }
 ```
 
-- [ ] **Step 3: `viewport.svelte.ts`** — add:
+- [x] **Step 3: `viewport.svelte.ts`** — add:
 
 ```ts
   /** World point under the middle of the canvas. */
@@ -1171,18 +1171,18 @@ export function mergedBox(o: ObjectRow, preview: Map<string, Partial<ObjectRow>>
   }
 ```
 
-- [ ] **Step 4: `Plan.svelte`** — element checklist (each is a concrete edit):
+- [x] **Step 4: `Plan.svelte`** — element checklist (each is a concrete edit):
 
-- [ ] prop `peers: Peer[] = []` (import `type Peer` from `../realtime/collab.svelte`); `const livePeers = $derived(peers.filter((p) => p.scenarioId === store.scenarioId))`.
-- [ ] object `<g data-test="object">` uses `{@const b = mergedBox(o, ui.preview, ui.remotePreview)}`; halos and selection outlines keep `mergedBox(o, ui.preview)`.
-- [ ] inside the object `<g>`, after the rect branch: `{#if store.unsynced.has(o.id)}<circle data-test="unsynced-dot" cx={b.w} cy={b.d} r={4 / scale} fill="var(--warn)" stroke="var(--surface)" stroke-width={1 / scale} />{/if}` (R15.10 orange dot).
-- [ ] after the local selection block, peer selections: for each `livePeers` × `p.selection` ids whose object exists and layer visible → `<polygon data-test="peer-selection" data-user={p.userId} points={polyPoints(footprint(mergedBox(o, ui.preview, ui.remotePreview)))} fill="none" stroke={p.color} stroke-width="1.2" stroke-dasharray="4 2" vector-effect="non-scaling-stroke" />` plus one name tag per peer at the first selected object's box top-left: `<text transform={`translate(${b.minX} ${b.maxY + 4 / scale}) scale(1,-1)`} font-size={fontPx * 0.8} fill={p.color} font-family="var(--font-ui)">{p.name}</text>`.
-- [ ] peer cursors, last in the world group so they draw on top: `{#each livePeers as p (p.userId)}{#if p.cursor}<g data-test="peer-cursor" data-user={p.userId} transform={`translate(${p.cursor[0]} ${p.cursor[1]}) scale(${1 / scale} ${-1 / scale})`} style="pointer-events:none"><path d="M0 0 L0 16 L4.5 12 L7.5 19 L10 18 L7 11 L12 11 Z" fill={p.color} stroke="var(--surface)" stroke-width="1" /><rect x="12" y="12" rx="3" width={p.name.length * 6.6 + 10} height="16" fill={p.color} /><text x="17" y="24" font-size="11" fill="#fff" font-family="var(--font-ui)">{p.name}</text></g>{/if}{/each}` (the group transform flips y back so the arrow and text are in screen orientation, sized in pixels).
-- [ ] `<svg … onpointerenter={() => (ui.cursorInside = true)} onpointerleave={() => (ui.cursorInside = false)}>`.
+- [x] prop `peers: Peer[] = []` (import `type Peer` from `../realtime/collab.svelte`); `const livePeers = $derived(peers.filter((p) => p.scenarioId === store.scenarioId))`.
+- [x] object `<g data-test="object">` uses `{@const b = mergedBox(o, ui.preview, ui.remotePreview)}`; halos and selection outlines keep `mergedBox(o, ui.preview)`.
+- [x] inside the object `<g>`, after the rect branch: `{#if store.unsynced.has(o.id)}<circle data-test="unsynced-dot" cx={b.w} cy={b.d} r={4 / scale} fill="var(--warn)" stroke="var(--surface)" stroke-width={1 / scale} />{/if}` (R15.10 orange dot).
+- [x] after the local selection block, peer selections: for each `livePeers` × `p.selection` ids whose object exists and layer visible → `<polygon data-test="peer-selection" data-user={p.userId} points={polyPoints(footprint(mergedBox(o, ui.preview, ui.remotePreview)))} fill="none" stroke={p.color} stroke-width="1.2" stroke-dasharray="4 2" vector-effect="non-scaling-stroke" />` plus one name tag per peer at the first selected object's box top-left: `<text transform={`translate(${b.minX} ${b.maxY + 4 / scale}) scale(1,-1)`} font-size={fontPx * 0.8} fill={p.color} font-family="var(--font-ui)">{p.name}</text>`.
+- [x] peer cursors, last in the world group so they draw on top: `{#each livePeers as p (p.userId)}{#if p.cursor}<g data-test="peer-cursor" data-user={p.userId} transform={`translate(${p.cursor[0]} ${p.cursor[1]}) scale(${1 / scale} ${-1 / scale})`} style="pointer-events:none"><path d="M0 0 L0 16 L4.5 12 L7.5 19 L10 18 L7 11 L12 11 Z" fill={p.color} stroke="var(--surface)" stroke-width="1" /><rect x="12" y="12" rx="3" width={p.name.length * 6.6 + 10} height="16" fill={p.color} /><text x="17" y="24" font-size="11" fill="#fff" font-family="var(--font-ui)">{p.name}</text></g>{/if}{/each}` (the group transform flips y back so the arrow and text are in screen orientation, sized in pixels).
+- [x] `<svg … onpointerenter={() => (ui.cursorInside = true)} onpointerleave={() => (ui.cursorInside = false)}>`.
 
-- [ ] **Step 5: `npm run check`** → 0 errors; `npx playwright test e2e/canvas.spec.ts` still green.
+- [x] **Step 5: `npm run check`** → 0 errors; `npx playwright test e2e/canvas.spec.ts` still green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/canvas && git commit -m "feat(canvas): peer cursors, peer selections, remote drag previews, unsynced dot, centerOn (R15.1, R15.3, R15.10, R15.13)"
@@ -1196,13 +1196,13 @@ git add src/lib/canvas && git commit -m "feat(canvas): peer cursors, peer select
 - Modify: `src/lib/ui/Avatar.svelte`, `src/lib/ui/StatusStrip.svelte`, `src/app.css`
 - Create: `src/lib/ui/Toast.svelte`, `src/lib/ui/ActivityPanel.svelte`, `src/lib/supabase/activity.ts`
 
-- [ ] **Step 1: `Avatar.svelte`** — props `online: boolean | null = null`, `onclick: (() => void) | null = null`. Renders `<button>` when `onclick` else `<span>`; both carry `class="avatar" class:avatar--online={online === true} class:avatar--away={online === false} data-test="avatar" data-online={online === null ? undefined : String(online)} style={`background:${color}`} {title}`. CSS in `app.css`: `.avatar--online { box-shadow: 0 0 0 2px var(--ok); } .avatar--away { opacity: 0.45; } button.avatar { cursor: pointer; padding: 0; }`.
+- [x] **Step 1: `Avatar.svelte`** — props `online: boolean | null = null`, `onclick: (() => void) | null = null`. Renders `<button>` when `onclick` else `<span>`; both carry `class="avatar" class:avatar--online={online === true} class:avatar--away={online === false} data-test="avatar" data-online={online === null ? undefined : String(online)} style={`background:${color}`} {title}`. CSS in `app.css`: `.avatar--online { box-shadow: 0 0 0 2px var(--ok); } .avatar--away { opacity: 0.45; } button.avatar { cursor: pointer; padding: 0; }`.
 
-- [ ] **Step 2: `StatusStrip.svelte`** — prop `offlineLabel = 'offline'`; the live text becomes `{live === 'offline' ? offlineLabel : live}`; `data-test="status-live"` on that span.
+- [x] **Step 2: `StatusStrip.svelte`** — prop `offlineLabel = 'offline'`; the live text becomes `{live === 'offline' ? offlineLabel : live}`; `data-test="status-live"` on that span.
 
-- [ ] **Step 3: `Toast.svelte`** — props `{ store: DocumentStore }`; `<div class="toasts">{#each store.notices as n (n.id)}<div class="toast" data-test="toast" role="status"><span>{n.text}</span>{#if n.action}<button class="btn btn--sm btn--primary" data-test="toast-action" onclick={n.action.run}>{n.action.label}</button>{/if}<button class="btn btn--sm btn--quiet" aria-label="Dismiss" onclick={() => store.dismiss(n.id)}>×</button></div>{/each}</div>`. Notices without an action auto-dismiss after 6 s (`$effect` over `store.notices` scheduling `store.dismiss`). CSS in `app.css`: `.toasts { position: fixed; right: 16px; bottom: 44px; display: grid; gap: 8px; z-index: 40; } .toast { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-left: 3px solid var(--warn); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 13px; }`. Also `.chip--warn { color: var(--warn); border-color: var(--warn); }`.
+- [x] **Step 3: `Toast.svelte`** — props `{ store: DocumentStore }`; `<div class="toasts">{#each store.notices as n (n.id)}<div class="toast" data-test="toast" role="status"><span>{n.text}</span>{#if n.action}<button class="btn btn--sm btn--primary" data-test="toast-action" onclick={n.action.run}>{n.action.label}</button>{/if}<button class="btn btn--sm btn--quiet" aria-label="Dismiss" onclick={() => store.dismiss(n.id)}>×</button></div>{/each}</div>`. Notices without an action auto-dismiss after 6 s (`$effect` over `store.notices` scheduling `store.dismiss`). CSS in `app.css`: `.toasts { position: fixed; right: 16px; bottom: 44px; display: grid; gap: 8px; z-index: 40; } .toast { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-left: 3px solid var(--warn); border-radius: var(--radius); box-shadow: var(--shadow); font-size: 13px; }`. Also `.chip--warn { color: var(--warn); border-color: var(--warn); }`.
 
-- [ ] **Step 4: `activity.ts`**
+- [x] **Step 4: `activity.ts`**
 
 ```ts
 import { supabase } from './client';
@@ -1224,9 +1224,9 @@ export async function listActivity(projectId: string, scenarioId: string, limit 
 }
 ```
 
-- [ ] **Step 5: `ActivityPanel.svelte`** — props `{ store, viewport, projectId, scenarioId, members }`. Fetches on mount and whenever `store.revision` changes (debounced 700 ms, cancel on unmount). Row = `<button class="act" data-test="activity-row" data-row={r.row_id} disabled={!target(r)} onclick={() => zoom(r)}>` with `<Avatar name color>` (from `members` by `user_id`, fallback name "someone", color `var(--ink-3)`), text `{name} {verb} {summary.name || table_name}`, and `<span class="mono muted">{when(r.at)}</span>`. `verb`: insert→"added", update→"changed", delete→"removed". `when`: `<60 s` "just now", `<60 min` "Nm", `<24 h` "Nh", else `toLocaleDateString(undefined,{month:'short',day:'2-digit'})`. `target(r)`: objects → `store.objects.get(row_id)` box via `aabb(footprint(...))`; walls → `aabb(wallOutline(w))`; openings → the wall's outline box; else null. `zoom`: `store.select([id])` for objects, then `viewport.fitTo(box padded 60)`. Panel title `Activity · {rows.length}`, `testId="activity-panel"`, list `max-height: 260px; overflow: auto`. Empty state: `<p class="note">No changes yet.</p>`.
+- [x] **Step 5: `ActivityPanel.svelte`** — props `{ store, viewport, projectId, scenarioId, members }`. Fetches on mount and whenever `store.revision` changes (debounced 700 ms, cancel on unmount). Row = `<button class="act" data-test="activity-row" data-row={r.row_id} disabled={!target(r)} onclick={() => zoom(r)}>` with `<Avatar name color>` (from `members` by `user_id`, fallback name "someone", color `var(--ink-3)`), text `{name} {verb} {summary.name || table_name}`, and `<span class="mono muted">{when(r.at)}</span>`. `verb`: insert→"added", update→"changed", delete→"removed". `when`: `<60 s` "just now", `<60 min` "Nm", `<24 h` "Nh", else `toLocaleDateString(undefined,{month:'short',day:'2-digit'})`. `target(r)`: objects → `store.objects.get(row_id)` box via `aabb(footprint(...))`; walls → `aabb(wallOutline(w))`; openings → the wall's outline box; else null. `zoom`: `store.select([id])` for objects, then `viewport.fitTo(box padded 60)`. Panel title `Activity · {rows.length}`, `testId="activity-panel"`, list `max-height: 260px; overflow: auto`. Empty state: `<p class="note">No changes yet.</p>`.
 
-- [ ] **Step 6: `npm run check`** → 0 errors. Commit:
+- [x] **Step 6: `npm run check`** → 0 errors. Commit:
 
 ```bash
 git add src/lib/ui src/lib/supabase/activity.ts src/app.css && git commit -m "feat(ui): online avatars, toast notices, offline-collaboration label, activity feed (R15.5, R15.10, R15.13, R15.14)"
@@ -1239,9 +1239,9 @@ git add src/lib/ui src/lib/supabase/activity.ts src/app.css && git commit -m "fe
 **Files:**
 - Modify: `src/routes/Project.svelte`
 
-- [ ] **Step 1: session lifecycle.** `let session = $state<CollabSession | null>(null)`. In `load()` after `members = await listMembers(projectId)`: set `store.userId = me.user_id`, `store.nameOf = (id) => members.find((m) => m.user_id === id)?.display_name || 'someone'`, `store.onWritten = (op, stored) => session?.announce(op, stored)`, then `session = new CollabSession(projectId, store, ui, { user_id: me.user_id, name: me.display_name || 'Anonymous', color: me.color }); void session.start();`. In the `onMount` cleanup call `session?.stop()`. `saveName()` additionally calls `session?.setIdentity(me.display_name, me.color)` after `me` reloads.
+- [x] **Step 1: session lifecycle.** `let session = $state<CollabSession | null>(null)`. In `load()` after `members = await listMembers(projectId)`: set `store.userId = me.user_id`, `store.nameOf = (id) => members.find((m) => m.user_id === id)?.display_name || 'someone'`, `store.onWritten = (op, stored) => session?.announce(op, stored)`, then `session = new CollabSession(projectId, store, ui, { user_id: me.user_id, name: me.display_name || 'Anonymous', color: me.color }); void session.start();`. In the `onMount` cleanup call `session?.stop()`. `saveName()` additionally calls `session?.setIdentity(me.display_name, me.color)` after `me` reloads.
 
-- [ ] **Step 2: effects** (after the existing scenario-load effect):
+- [x] **Step 2: effects** (after the existing scenario-load effect):
 
 ```ts
   $effect(() => {
@@ -1270,13 +1270,13 @@ git add src/lib/ui src/lib/supabase/activity.ts src/app.css && git commit -m "fe
   });
 ```
 
-- [ ] **Step 3: title block people** — `{#each members as m}` → `<Avatar name color online={session ? m.user_id === me.user_id || session.peers.has(m.user_id) : null} title={`${name} · ${m.access}${online ? ' · online' : ''}`} onclick={() => jumpTo(m.user_id)} />` where `jumpTo(userId)` reads `session?.peers.get(userId)?.viewport` and calls `viewport.centerOn(v.cx, v.cy, v.scale)` (once, not follow). Actions snippet gains `{#if session && session.budgetFraction >= 0.5}<span class="chip chip--warn" data-test="rt-budget" title={`≈${session.budgetEstimate.toLocaleString()} realtime messages/month projected from this browser (free tier 2M)`}>realtime {Math.round(session.budgetFraction * 100)}%</span>{/if}`.
+- [x] **Step 3: title block people** — `{#each members as m}` → `<Avatar name color online={session ? m.user_id === me.user_id || session.peers.has(m.user_id) : null} title={`${name} · ${m.access}${online ? ' · online' : ''}`} onclick={() => jumpTo(m.user_id)} />` where `jumpTo(userId)` reads `session?.peers.get(userId)?.viewport` and calls `viewport.centerOn(v.cx, v.cy, v.scale)` (once, not follow). Actions snippet gains `{#if session && session.budgetFraction >= 0.5}<span class="chip chip--warn" data-test="rt-budget" title={`≈${session.budgetEstimate.toLocaleString()} realtime messages/month projected from this browser (free tier 2M)`}>realtime {Math.round(session.budgetFraction * 100)}%</span>{/if}`.
 
-- [ ] **Step 4: canvas + dock + strip** — `<Plan … peers={session ? [...session.peers.values()] : []} />`; Project tab dock order: Scenarios, `<ActivityPanel {store} {viewport} {projectId} scenarioId={scenarioId ?? ''} {members} />`, Share links, People; `<StatusStrip live={session?.status ?? 'connecting'} offlineLabel="offline collaboration" …/>`; `<Toast {store} />` after `<ObjectDialog>`. Remove the `store-error` banner's dependency on save errors (it still shows load errors).
+- [x] **Step 4: canvas + dock + strip** — `<Plan … peers={session ? [...session.peers.values()] : []} />`; Project tab dock order: Scenarios, `<ActivityPanel {store} {viewport} {projectId} scenarioId={scenarioId ?? ''} {members} />`, Share links, People; `<StatusStrip live={session?.status ?? 'connecting'} offlineLabel="offline collaboration" …/>`; `<Toast {store} />` after `<ObjectDialog>`. Remove the `store-error` banner's dependency on save errors (it still shows load errors).
 
-- [ ] **Step 5: verify locally** — `npm run check` 0 errors; `npm test` green; `npx playwright test` (3 specs) green. Open two dev-server tabs on the same edit link and confirm: named cursor, live drag, avatar rings, activity rows.
+- [x] **Step 5: verify locally** — `npm run check` 0 errors; `npm test` green; `npx playwright test` (3 specs) green. Open two dev-server tabs on the same edit link and confirm: named cursor, live drag, avatar rings, activity rows.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/routes/Project.svelte && git commit -m "feat(project): wire realtime session — cursors, drags, selection, presence avatars + jump, budget chip, activity, toasts (SPEC §15)"
@@ -1290,7 +1290,7 @@ git add src/routes/Project.svelte && git commit -m "feat(project): wire realtime
 - Create: `e2e/realtime.spec.ts`
 - Modify: `README.md` (runbook rows P2)
 
-- [ ] **Step 1: Write the spec**
+- [x] **Step 1: Write the spec**
 
 ```ts
 // Two browser contexts on one edit link (SPEC §15). Runs against the dev server or the live site (PW_BASE_URL).
@@ -1438,9 +1438,9 @@ test('cursors, live drag, committed position, LWW, reconnect refetch, presence, 
 });
 ```
 
-- [ ] **Step 2: Run locally** — `npx playwright test e2e/realtime.spec.ts` → 1 passed. Fix product code (not the assertions) until it does.
+- [x] **Step 2: Run locally** — `npx playwright test e2e/realtime.spec.ts` → 1 passed. Fix product code (not the assertions) until it does.
 
-- [ ] **Step 3: README runbook rows** (append under the P1 rows):
+- [x] **Step 3: README runbook rows** (append under the P1 rows):
 
 ```
 P2 rows (two browser profiles on the edit link):
@@ -1456,7 +1456,7 @@ P2 rows (two browser profiles on the edit link):
 20. With the network blocked during a drag: after retries a toast offers Retry and the object shows an orange dot until it saves. (R15.10)
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add e2e/realtime.spec.ts README.md && git commit -m "test(e2e): two-context realtime spec; runbook P2 rows"

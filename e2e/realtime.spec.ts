@@ -138,6 +138,69 @@ test('cursors, live drag, committed position, LWW, reconnect refetch, presence, 
   await expect(objectByName(b, 'Rack')).toHaveAttribute('data-x', '360', { timeout: 60_000 });
   await online(b);
 
+  // Jump to a peer's viewport (R15.13): Bob zooms in, Ann clicks his avatar and lands on his zoom level.
+  const scaleOf = (p: Page) =>
+    p.evaluate(() => Number((document.querySelector('[data-test=plan] > g') as SVGGElement).getAttribute('transform')!.match(/matrix\(([^)]+)\)/)![1].split(' ')[0]));
+  const before = await scaleOf(a);
+  await b.mouse.move(bp[0], bp[1]);
+  await b.mouse.wheel(0, -800);
+  const target = await scaleOf(b);
+  expect(Math.abs(target - before)).toBeGreaterThan(0.01);
+  const bobAvatar = a.locator('[data-test=avatar][title^="Bob"]');
+  await expect
+    .poll(
+      async () => {
+        await bobAvatar.click();
+        return scaleOf(a);
+      },
+      { timeout: 15_000 },
+    )
+    .toBeCloseTo(target, 3);
+  await a.keyboard.press('Control+0');
+  await b.keyboard.press('Control+0');
+
+  // Undo over a peer's newer change (R15.11): Ann moves, Bob moves after her, Ann's undo toasts with Bob's name.
+  await a.keyboard.press('Escape');
+  await objectByName(a, 'Rack').click();
+  await a.getByTestId('insp-x').fill(`31'`);
+  await a.getByTestId('insp-x').press('Enter');
+  await expect(objectByName(b, 'Rack')).toHaveAttribute('data-x', '372', { timeout: 10_000 });
+  await objectByName(b, 'Rack').click();
+  await b.getByTestId('insp-x').fill(`32'`);
+  await b.getByTestId('insp-x').press('Enter');
+  await expect(objectByName(a, 'Rack')).toHaveAttribute('data-x', '384', { timeout: 10_000 });
+  await a.locator('button[title="Undo (Ctrl+Z)"]').click();
+  await expect(a.getByTestId('toast')).toContainText("Undid over Bob's newer change", { timeout: 10_000 });
+  await expect(objectByName(a, 'Rack')).toHaveAttribute('data-x', '360');
+  await expect(objectByName(b, 'Rack')).toHaveAttribute('data-x', '360', { timeout: 10_000 });
+
+  // Failed writes retry, then toast with Retry and an orange dot (R15.10); the app keeps working single-user offline (R15.5).
+  await ctxB.setOffline(true);
+  await expect(b.getByTestId('status-live')).toHaveText('offline collaboration', { timeout: 15_000 });
+  await objectByName(b, 'Rack').click();
+  await b.keyboard.press('ArrowRight');
+  await expect(objectByName(b, 'Rack')).toHaveAttribute('data-x', '361');
+  await expect(b.getByTestId('toast-action')).toHaveText('Retry', { timeout: 20_000 });
+  await expect(b.getByTestId('unsynced-dot')).toHaveCount(1);
+  await ctxB.setOffline(false);
+  await online(b);
+  await b.getByTestId('toast-action').click();
+  await expect(b.getByTestId('unsynced-dot')).toHaveCount(0, { timeout: 15_000 });
+  await expect(objectByName(a, 'Rack')).toHaveAttribute('data-x', '361', { timeout: 10_000 });
+
+  // Cursors only within the same scenario (R15.3): Ann forks and switches; neither page renders the other's cursor.
+  await b.mouse.move(bp[0] + 30, bp[1] + 30);
+  await expect(a.getByTestId('peer-cursor')).toHaveCount(1, { timeout: 10_000 });
+  const baseUrl = a.url();
+  a.on('dialog', (d) => d.accept(d.defaultValue() || 'Option B'));
+  await a.getByTestId('fork').click();
+  await a.waitForURL((u) => u.toString() !== baseUrl);
+  await expect(a.getByTestId('wall')).toHaveCount(11);
+  await b.mouse.move(bp[0] + 40, bp[1] + 40);
+  await a.mouse.move(bp[0] + 40, bp[1] + 40);
+  await expect(a.getByTestId('peer-cursor')).toHaveCount(0, { timeout: 10_000 });
+  await expect(b.getByTestId('peer-cursor')).toHaveCount(0, { timeout: 10_000 });
+
   // Activity feed lists the rack with Ann's name (R15.14).
   await a.getByTestId('tab-project').click();
   await expect(a.getByTestId('activity-row').first()).toContainText('Rack', { timeout: 10_000 });

@@ -9,6 +9,7 @@
   let name = $state('Pool room');
   let template = $state<'empty' | 'pool_room'>('empty');
   let busy = $state(false);
+  let ready = $state(false);
   let error = $state('');
   let mine = $state<Array<{ id: string; name: string; access: string }>>([]);
 
@@ -19,6 +20,7 @@
     }
     try {
       await ensureSession();
+      ready = true;
       mine = await listMyProjects();
     } catch (e) {
       error = String((e as Error).message ?? e);
@@ -53,7 +55,7 @@
       <option value="pool_room">Pool room (63×29)</option>
     </select>
   </label>
-  <button data-test="create" disabled={busy || !name.trim()} onclick={create}>Create</button>
+  <button data-test="create" disabled={busy || !ready || !name.trim()} onclick={create}>Create</button>
 </section>
 
 <section class="panel">

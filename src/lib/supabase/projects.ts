@@ -1,10 +1,12 @@
 import { supabase } from './client';
+import { ensureSession } from './auth';
 import type { Database } from './database.types';
 
 export type ProjectRow = Database['public']['Tables']['projects']['Row'];
 export type CreatedProject = { project_id: string; view_token: string; edit_token: string };
 
 export async function createProject(name: string, template: 'empty' | 'pool_room' = 'empty'): Promise<CreatedProject> {
+  await ensureSession();
   const { data, error } = await supabase.rpc('create_project', { p_name: name, p_template: template });
   if (error) throw error;
   return data as unknown as CreatedProject;

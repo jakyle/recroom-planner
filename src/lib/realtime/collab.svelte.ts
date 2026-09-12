@@ -33,6 +33,7 @@ export class CollabSession {
   private me: PresenceMeta;
   private everSubscribed = false;
   private closed = false;
+  private opening = false;
   private retries = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private viewTimer: ReturnType<typeof setTimeout> | null = null;
@@ -40,6 +41,8 @@ export class CollabSession {
   private dragging = false;
   private lastSelection = '';
   private previewOwner = new Map<string, string[]>();
+  /** Cursor/selection messages that arrived before the sender's presence did; applied at the next sync. */
+  private early = new Map<string, { cursor?: Pt | null; selection?: string[] }>();
 
   constructor(
     private projectId: string,
@@ -78,19 +81,28 @@ export class CollabSession {
   }
 
   private async open(): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.opening) return;
+    this.opening = true;
     const old = this.channel;
     this.channel = null;
-    if (old) void supabase.removeChannel(old);
+    this.early.clear();
+    const removal = old ? supabase.removeChannel(old).catch(() => undefined) : null;
     this.status = this.everSubscribed ? 'offline' : 'connecting';
     let ch: RealtimeChannel;
     try {
       ch = await projectChannel(this.projectId, this.me.user_id);
+      if (old && ch === old) {
+        await removal;
+        ch = await projectChannel(this.projectId, this.me.user_id);
+      }
     } catch {
+      this.opening = false;
       this.status = 'offline';
       this.scheduleRetry();
       return;
     }
+    this.opening = false;
+    if (this.closed) return;
     ch.on('broadcast', { event: EVENTS.cursor }, ({ payload }) => this.onCursor(payload as CursorMsg))
       .on('broadcast', { event: EVENTS.drag }, ({ payload }) => this.onDrag(payload as DragMsg))
       .on('broadcast', { event: EVENTS.select }, ({ payload }) => this.onSelect(payload as SelectMsg))
@@ -246,14 +258,16 @@ export class CollabSession {
       if (!meta || meta.user_id === this.me.user_id) continue;
       seen.add(meta.user_id);
       const prev = this.peers.get(meta.user_id);
+      const early = this.early.get(meta.user_id);
+      this.early.delete(meta.user_id);
       this.peers.set(meta.user_id, {
         userId: meta.user_id,
         name: meta.name,
         color: meta.color,
         scenarioId: meta.scenario_id,
         viewport: meta.viewport ?? null,
-        cursor: prev?.cursor ?? null,
-        selection: prev?.selection ?? [],
+        cursor: prev?.cursor ?? early?.cursor ?? null,
+        selection: prev?.selection ?? early?.selection ?? [],
       });
     }
     for (const id of [...this.peers.keys()]) {
@@ -264,6 +278,12 @@ export class CollabSession {
     this.count(1);
   }
 
+  private setPeerCursor(userId: string, cursor: Pt | null): void {
+    const p = this.peers.get(userId);
+    if (p) this.peers.set(userId, { ...p, cursor });
+    else this.early.set(userId, { ...(this.early.get(userId) ?? {}), cursor });
+  }
+
   private clearPreviewOf(userId: string): void {
     for (const id of this.previewOwner.get(userId) ?? []) this.ui.remotePreview.delete(id);
     this.previewOwner.delete(userId);
@@ -272,15 +292,13 @@ export class CollabSession {
   private onCursor(msg: CursorMsg): void {
     this.count(1);
     if (msg.s !== this.store.scenarioId) return;
-    const p = this.peers.get(msg.u);
-    if (p) this.peers.set(msg.u, { ...p, cursor: msg.c });
+    this.setPeerCursor(msg.u, msg.c);
   }
 
   private onDrag(msg: DragMsg): void {
     this.count(1);
     if (msg.s !== this.store.scenarioId) return;
-    const p = this.peers.get(msg.u);
-    if (p && msg.c !== undefined) this.peers.set(msg.u, { ...p, cursor: msg.c });
+    if (msg.c !== undefined) this.setPeerCursor(msg.u, msg.c);
     this.clearPreviewOf(msg.u);
     const ids = Object.keys(msg.p);
     for (const id of ids) this.ui.remotePreview.set(id, msg.p[id]);
@@ -292,6 +310,7 @@ export class CollabSession {
     if (msg.s !== this.store.scenarioId) return;
     const p = this.peers.get(msg.u);
     if (p) this.peers.set(msg.u, { ...p, selection: msg.ids });
+    else this.early.set(msg.u, { ...(this.early.get(msg.u) ?? {}), selection: msg.ids });
   }
 
   private onCommitted(msg: CommittedMsg): void {

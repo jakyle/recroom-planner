@@ -18,7 +18,7 @@ test.use({ testIdAttribute: 'data-test' });
 test('owner creates, editor and viewer join, viewer cannot write', async ({ browser }) => {
   const ownerCtx = await browser.newContext();
   const owner = await ownerCtx.newPage();
-  await owner.goto('/');
+  await owner.goto('./');
   await owner.getByTestId('project-name').fill('E2E ' + Date.now());
   await owner.getByTestId('create').click();
   await owner.getByTestId('display-name').fill('Owner');

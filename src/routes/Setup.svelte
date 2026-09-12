@@ -43,9 +43,13 @@
         set(3, 'manual', 'create or join a project first');
         return;
       }
-      const ch = await projectChannel(mine[0].id);
-      const { status, error: joinError } = await subscribeOnce(ch);
-      await supabase.removeChannel(ch);
+      let status = '';
+      let joinError: string | null = null;
+      for (let attempt = 0; attempt < 2 && status !== 'SUBSCRIBED'; attempt++) {
+        const ch = await projectChannel(mine[0].id);
+        ({ status, error: joinError } = await subscribeOnce(ch, 15_000));
+        await supabase.removeChannel(ch);
+      }
       set(3, status === 'SUBSCRIBED' ? 'ok' : 'fail', joinError ?? status);
     } catch (e) {
       set(3, 'fail', String((e as Error).message));

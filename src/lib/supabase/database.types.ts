@@ -272,6 +272,7 @@ export type Database = {
           color: string
           id: string
           key: string
+          locked: boolean
           name: string
           project_id: string
           sort: number
@@ -284,6 +285,7 @@ export type Database = {
           color?: string
           id?: string
           key: string
+          locked?: boolean
           name: string
           project_id: string
           sort?: number
@@ -296,6 +298,7 @@ export type Database = {
           color?: string
           id?: string
           key?: string
+          locked?: boolean
           name?: string
           project_id?: string
           sort?: number
@@ -1222,6 +1225,7 @@ export type Database = {
       }
       scenario_project: { Args: { s: string }; Returns: string }
       seed_layers: { Args: { p_project: string }; Returns: undefined }
+      seed_pool_room: { Args: { p_project: string }; Returns: undefined }
       set_display_name: {
         Args: { p_color?: string; p_name: string; p_project: string }
         Returns: undefined

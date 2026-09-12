@@ -6,7 +6,7 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 
 - **Next action:** Implement **SPEC §2 + §3 + §19 + §20 (Phase P0 Foundation)** starting with R2.14 (repo scaffold) — Svelte 5 + Vite + TS skeleton per §2.4, then the Supabase migrations for §19.
 - **Done:** SPEC.md (full scope, 256 requirements), CHECKLIST.md (all `[ ]`), this file, napkin. **No code written.**
-- **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote `https://github.com/jakyle/recroom-planner` (**private**; GitHub Pages needs it public or a Pro plan — decide at P0 deploy, R20.1).
+- **Location:** `C:/Users/jjack/dev/recroom-planner/`, branch `main`, remote `https://github.com/jakyle/recroom-planner` (**public**, per the user). **Never commit secrets**: Supabase URL/anon key and any service-role key live only in GitHub Actions secrets and an untracked `.env` (R2.3, R20.1); `.gitignore` already excludes `.env*`.
 - **Files:** `SPEC.md`, `CHECKLIST.md`, `HANDOFF.md`, `.claude/napkin.md`, `.gitignore`, `.gitattributes` — all committed and pushed; working tree clean.
 - **§24 confirmed:** the user accepted all 12 additional features (2026-09-12); they are normal requirements in the phase each names.
 

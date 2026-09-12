@@ -19,3 +19,6 @@ Durable lesson: the prompt file is a prior agent's summary; the user's live answ
 
 ### 2026-09-12 — Program is smaller than the prompt implied
 Sauna, bar, bathroom are out. Pool table is a custom object the user places later. Keep presets, pre-place nothing.
+
+### 2026-09-12 — Repo is public; no secrets in git, ever
+The user made the repo public for GitHub Pages. Supabase keys (even the anon key), share tokens, and service-role keys go in GitHub Actions secrets / untracked `.env` only. Check `git diff --cached` for `eyJ` / `sb_` / `supabase.co` before every commit.

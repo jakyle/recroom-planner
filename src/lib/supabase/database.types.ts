@@ -1230,6 +1230,10 @@ export type Database = {
         Args: { p_color?: string; p_name: string; p_project: string }
         Returns: undefined
       }
+      set_project_setting: {
+        Args: { p_key: string; p_project: string; p_value: Json }
+        Returns: Json
+      }
       setup_check: { Args: never; Returns: Json }
       touch_last_seen: { Args: { p_project: string }; Returns: undefined }
       wall_project: { Args: { w: string }; Returns: string }

@@ -191,6 +191,22 @@
         </details>
       {/if}
 
+      {#if selected.length > 1}
+        <div class="field">
+          <span class="label">Align</span>
+          <div class="row wrap">
+            <button class="btn btn--sm" data-test="align-left" title="Align left edges" onclick={() => store.alignSelected('left')}>⇤</button>
+            <button class="btn btn--sm" title="Align centers" onclick={() => store.alignSelected('center')}>⇹</button>
+            <button class="btn btn--sm" title="Align right edges" onclick={() => store.alignSelected('right')}>⇥</button>
+            <button class="btn btn--sm" title="Align tops" onclick={() => store.alignSelected('top')}>⤒</button>
+            <button class="btn btn--sm" title="Align middles" onclick={() => store.alignSelected('middle')}>⇳</button>
+            <button class="btn btn--sm" data-test="align-bottom" title="Align bottoms" onclick={() => store.alignSelected('bottom')}>⤓</button>
+            <button class="btn btn--sm" data-test="distribute-x" title="Distribute horizontally" disabled={selected.length < 3} onclick={() => store.distributeSelected('x')}>⋯</button>
+            <button class="btn btn--sm" title="Distribute vertically" disabled={selected.length < 3} onclick={() => store.distributeSelected('y')}>⋮</button>
+          </div>
+        </div>
+      {/if}
+
       <div class="row">
         <button class="btn btn--sm" data-test="insp-lock" onclick={toggleLocked}>{selected.every((o) => o.locked) ? 'Unlock' : 'Lock'}</button>
         <button class="btn btn--sm" onclick={() => store.duplicateObjects(ids())}>Duplicate</button>
@@ -203,6 +219,7 @@
 <style>
   .insp { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; min-width: 0; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .wrap { flex-wrap: wrap; gap: 4px; }
   .tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .tags .input { flex: 1; min-width: 90px; padding: 4px 6px; font-size: 12px; }
   .chip__x { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 0 0 2px; font-size: 12px; }

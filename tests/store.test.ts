@@ -136,4 +136,18 @@ describe('DocumentStore', () => {
     expect(store.objects.get(ids[0])?.x).toBe(12);
     expect(store.selection.has(ids[0])).toBe(true);
   });
+
+  it('aligns and distributes', async () => {
+    const b = store.newObject({ name: 'B', x: 100, y: 50, w: 20, d: 20, h: 10 });
+    const c = store.newObject({ name: 'C', x: 300, y: 90, w: 40, d: 20, h: 10 });
+    await store.createObjects([b, c]);
+    store.select(['O1', b.id, c.id]);
+    await store.alignSelected('bottom');
+    expect(store.objects.get(b.id)?.y).toBe(0);
+    expect(store.objects.get(c.id)?.y).toBe(0);
+    await store.distributeSelected('x');
+    expect(store.objects.get('O1')?.x).toBe(0);
+    expect(store.objects.get(c.id)?.x).toBe(300);
+    expect(store.objects.get(b.id)?.x).toBe(182);
+  });
 });

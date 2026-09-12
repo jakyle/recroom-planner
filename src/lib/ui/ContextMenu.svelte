@@ -45,6 +45,11 @@
       {/if}
     </li>
     <li><button role="menuitem" disabled={!canEdit} onclick={() => run(addTag)}>Add tag…</button></li>
+    {#if ids.length > 1}
+      <li><button role="menuitem" disabled={!canEdit} onclick={() => run(() => store.alignSelected('left'))}>Align left</button></li>
+      <li><button role="menuitem" disabled={!canEdit} onclick={() => run(() => store.alignSelected('bottom'))}>Align bottom</button></li>
+      <li><button role="menuitem" disabled={!canEdit || ids.length < 3} onclick={() => run(() => store.distributeSelected('x'))}>Distribute horizontally</button></li>
+    {/if}
     <li><button role="menuitem" disabled title="Phase P4">Save to library</button></li>
     <li><button role="menuitem" disabled title="Phase P4">Add comment</button></li>
     <li class="cm__rule"></li>

@@ -33,6 +33,9 @@
   import HoverCard from '../lib/ui/HoverCard.svelte';
   import ContextMenu from '../lib/ui/ContextMenu.svelte';
   import ObjectDialog from '../lib/ui/ObjectDialog.svelte';
+  import UnderlayPanel from '../lib/ui/UnderlayPanel.svelte';
+  import { signedImageUrl } from '../lib/supabase/storage';
+  import type { Underlay } from '../lib/supabase/settings';
 
   let { projectId, scenarioId }: { projectId: string; scenarioId: string | null } = $props();
 
@@ -50,6 +53,23 @@
   let dockTab = $state<'plan' | 'project'>('plan');
   let showHelp = $state(false);
   let plan = $state<Plan | null>(null);
+  let underlay = $state<Underlay | null>(null);
+  let underlayUrl = $state('');
+
+  $effect(() => {
+    const path = underlay?.path;
+    if (!path) {
+      underlayUrl = '';
+      return;
+    }
+    let cancelled = false;
+    void signedImageUrl(path).then((u) => {
+      if (!cancelled) underlayUrl = u;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   const store = new DocumentStore(supabaseRepo);
   const viewport = new Viewport();
@@ -97,6 +117,7 @@
       }
       project = await getProject(projectId);
       projectNameDraft = project.name;
+      underlay = ((project.settings as Record<string, unknown>)?.underlay as Underlay | undefined) ?? null;
       scenarios = await listScenarios(projectId);
       members = await listMembers(projectId);
       if (!scenarioId) {
@@ -223,7 +244,7 @@
 
       <div class="paper paper--canvas">
         {#if scenarioId && !store.loading && store.scenarioId === scenarioId}
-          <Plan bind:this={plan} {store} {viewport} {ui} {canEdit} />
+          <Plan bind:this={plan} {store} {viewport} {ui} {canEdit} {underlay} {underlayUrl} />
         {:else}
           <div class="paper__note"><strong>{current?.name ?? project.name}</strong>loading plan…</div>
         {/if}
@@ -264,6 +285,7 @@
           <Inspector {store} {canEdit} />
           <LayersPanel {store} {canEdit} />
           <ObjectsPanel {store} {viewport} {canEdit} />
+          <UnderlayPanel {projectId} {underlay} {canEdit} onchange={(u) => (underlay = u)} />
         {:else}
           <Panel title="Scenarios" testId="scenarios-panel">
             <ul class="list">

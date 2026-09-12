@@ -2,6 +2,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import type { Repo, ScenarioData } from '../supabase/repo';
 import type { Batch, GroupRow, LayerRow, Mount, ObjectRow, Op, OpeningRow, Row, SlabRow, TableName, WallRow } from './types';
 import { defaultZ } from './types';
+import { aabb, footprint, type AABB } from '../geom/transform';
 
 export type LayerUi = { visible: boolean; opacity: number };
 export type SelectMode = 'replace' | 'toggle' | 'add';
@@ -386,6 +387,59 @@ export class DocumentStore {
     const cur = this.layers.get(id);
     if (!cur) return Promise.resolve();
     return this.commit({ label: locked ? 'lock layer' : 'unlock layer', ops: [{ type: 'update', table: 'layers', id, before: { locked: cur.locked }, after: { locked } }] });
+  }
+
+  /** Align selected objects' bounding boxes (R24.10). */
+  alignSelected(edge: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'): Promise<void> {
+    const objs = this.selectedObjects();
+    if (objs.length < 2) return Promise.resolve();
+    const boxes = new Map(objs.map((o) => [o.id, aabb(footprint({ x: o.x, y: o.y, w: o.w, d: o.d, rot: o.rot }))] as [string, AABB]));
+    const all = [...boxes.values()];
+    const minX = Math.min(...all.map((b) => b.minX));
+    const maxX = Math.max(...all.map((b) => b.maxX));
+    const minY = Math.min(...all.map((b) => b.minY));
+    const maxY = Math.max(...all.map((b) => b.maxY));
+    return this.updateObjects(
+      objs.map((o) => o.id),
+      (o) => {
+        const b = boxes.get(o.id)!;
+        switch (edge) {
+          case 'left': return { x: o.x + (minX - b.minX) };
+          case 'right': return { x: o.x + (maxX - b.maxX) };
+          case 'center': return { x: o.x + ((minX + maxX) / 2 - (b.minX + b.maxX) / 2) };
+          case 'bottom': return { y: o.y + (minY - b.minY) };
+          case 'top': return { y: o.y + (maxY - b.maxY) };
+          default: return { y: o.y + ((minY + maxY) / 2 - (b.minY + b.maxY) / 2) };
+        }
+      },
+      `align ${edge}`,
+    );
+  }
+
+  /** Space selected objects evenly along an axis, keeping the outermost two in place (R24.10). */
+  distributeSelected(axis: 'x' | 'y'): Promise<void> {
+    const objs = this.selectedObjects();
+    if (objs.length < 3) return Promise.resolve();
+    const items = objs
+      .map((o) => ({ o, b: aabb(footprint({ x: o.x, y: o.y, w: o.w, d: o.d, rot: o.rot })) }))
+      .sort((p, q) => (axis === 'x' ? p.b.minX - q.b.minX : p.b.minY - q.b.minY));
+    const lo = axis === 'x' ? items[0].b.minX : items[0].b.minY;
+    const last = items[items.length - 1].b;
+    const hi = axis === 'x' ? last.maxX : last.maxY;
+    const total = items.reduce((s, it) => s + (axis === 'x' ? it.b.maxX - it.b.minX : it.b.maxY - it.b.minY), 0);
+    const gap = (hi - lo - total) / (items.length - 1);
+    const target = new Map<string, number>();
+    let cursor = lo;
+    for (const it of items) {
+      const size = axis === 'x' ? it.b.maxX - it.b.minX : it.b.maxY - it.b.minY;
+      target.set(it.o.id, cursor - (axis === 'x' ? it.b.minX : it.b.minY));
+      cursor += size + gap;
+    }
+    return this.updateObjects(
+      objs.map((o) => o.id),
+      (o) => (axis === 'x' ? { x: o.x + (target.get(o.id) ?? 0) } : { y: o.y + (target.get(o.id) ?? 0) }),
+      `distribute ${axis}`,
+    );
   }
 
   /** Objects sorted for rendering: by layer sort, then z_order. */

@@ -112,6 +112,43 @@ test('seed renders, objects place/drag/persist, marquee, layers, undo', async ({
   await page.getByTestId('insp-w').press('Enter');
   await expect(page.getByTestId('insp-w')).toHaveValue(`5'-0"`);
 
+  // Align and distribute (R24.10).
+  await placeObject(page, 'Plate tree', [240, 480], [24, 24]);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+a');
+  await expect(page.locator('[data-test=inspector] h2')).toHaveText('3 objects');
+  await page.getByTestId('align-bottom').click();
+  await expect
+    .poll(async () => new Set(await page.locator('[data-test=object]').evaluateAll((els) => els.map((e) => e.getAttribute('data-y')))).size)
+    .toBe(1);
+  await page.getByTestId('distribute-x').click();
+  await expect
+    .poll(async () => page.locator('[data-test=object]').evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-x'))).sort((a, b) => a - b)))
+    .toEqual([120, 186, 240]);
+
+  // Trace underlay upload (R24.6): a generated 2x1 PNG scaled to the room width, persisted in project settings.
+  const dataUrl = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 200;
+    c.height = 100;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#c0392b';
+    g.fillRect(0, 0, 200, 100);
+    return c.toDataURL('image/png');
+  });
+  const png = Buffer.from(dataUrl.split(',')[1], 'base64');
+  await page.locator('[data-test=underlay-panel] input[type=file]').first().setInputFiles({ name: 'sketch.png', mimeType: 'image/png', buffer: png });
+  await expect(page.getByTestId('underlay')).toHaveCount(1);
+  await expect(page.getByTestId('underlay')).toHaveAttribute('width', '348');
+  await expect(page.getByTestId('underlay')).toHaveAttribute('height', '174');
+  await page.getByTestId('underlay-width').fill(`63'`);
+  await page.getByTestId('underlay-width').press('Enter');
+  await expect(page.getByTestId('underlay')).toHaveAttribute('width', '756');
+  await page.reload();
+  await expect(page.getByTestId('underlay')).toHaveAttribute('width', '756');
+  await page.getByTestId('underlay-visible').click();
+  await expect(page.getByTestId('underlay')).toHaveCount(0);
+
   // Grid + snap toggles reflect in the status strip.
   await page.keyboard.press('g');
   await expect(page.getByTestId('status-grid')).toHaveText('grid off');

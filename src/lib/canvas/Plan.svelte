@@ -13,12 +13,16 @@
   import { propsOf, type ObjectRow } from '../model/types';
   import { sceneBox, mergedBox, polyPoints, pointsToPath } from './scene';
 
+  import type { Underlay } from '../supabase/settings';
+
   let {
     store,
     viewport,
     ui,
     canEdit,
-  }: { store: DocumentStore; viewport: Viewport; ui: CanvasUi; canEdit: boolean } = $props();
+    underlay = null,
+    underlayUrl = '',
+  }: { store: DocumentStore; viewport: Viewport; ui: CanvasUi; canEdit: boolean; underlay?: Underlay | null; underlayUrl?: string } = $props();
 
   const tools: Record<ToolName, Tool> = {
     select: new SelectTool(),
@@ -287,6 +291,22 @@
       {/if}
       <rect x={visible.minX} y={visible.minY} width={visible.maxX - visible.minX} height={visible.maxY - visible.minY} fill="url(#grid-12)" />
       <rect x={visible.minX} y={visible.minY} width={visible.maxX - visible.minX} height={visible.maxY - visible.minY} fill="url(#grid-60)" />
+    {/if}
+
+    {#if underlay && underlay.visible && underlayUrl}
+      {@const h = underlay.width * underlay.aspect}
+      <image
+        data-test="underlay"
+        href={underlayUrl}
+        x="0"
+        y="0"
+        width={underlay.width}
+        height={h}
+        preserveAspectRatio="none"
+        opacity={underlay.opacity}
+        transform={`translate(${underlay.x} ${underlay.y}) rotate(${underlay.rotation}) translate(0 ${h}) scale(1 -1)`}
+        style="pointer-events:none"
+      />
     {/if}
 
     {#if store.slab}

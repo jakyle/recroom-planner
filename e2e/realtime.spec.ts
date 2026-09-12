@@ -102,6 +102,7 @@ test('cursors, live drag, committed position, LWW, reconnect refetch, presence, 
   // Bob's selection shows in Ann's tab with his name (R15.13).
   await objectByName(b, 'Rack').click();
   await expect(a.getByTestId('peer-selection')).toHaveCount(1, { timeout: 10_000 });
+  await a.screenshot({ path: 'test-results/realtime-peers.png' });
 
   // LWW (R15.9): both set x at the same time; both converge on one of the two values.
   await objectByName(a, 'Rack').click();

@@ -59,6 +59,7 @@ export class CollabSession {
   async start(): Promise<void> {
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('online', this.onOnline);
+    window.addEventListener('offline', this.onOffline);
     await this.open();
   }
 
@@ -66,7 +67,8 @@ export class CollabSession {
     this.closed = true;
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('online', this.onOnline);
-    if (this.retryTimer) clearTimeout(this.retryTimer);
+    window.removeEventListener('offline', this.onOffline);
+    this.clearRetry();
     if (this.viewTimer) clearTimeout(this.viewTimer);
     this.outbox.stop();
     this.budget.persist();
@@ -116,8 +118,14 @@ export class CollabSession {
     });
   }
 
+  private clearRetry(): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
   private scheduleRetry(): void {
     if (this.closed || this.retryTimer) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     const delay = Math.min(RETRY_MAX_MS, 1000 * 2 ** this.retries);
     this.retries += 1;
     this.retryTimer = setTimeout(() => {
@@ -140,7 +148,21 @@ export class CollabSession {
   };
 
   private onOnline = (): void => {
+    this.clearRetry();
+    this.retries = 0;
     if (this.status !== 'online') void this.open();
+  };
+
+  /** The browser lost its network: drop the socket now instead of waiting for the heartbeat to notice (R15.5). */
+  private onOffline = (): void => {
+    if (this.closed) return;
+    this.status = 'offline';
+    this.peers.clear();
+    this.ui.remotePreview.clear();
+    this.previewOwner.clear();
+    this.outbox.stop();
+    this.dragging = false;
+    supabase.realtime.disconnect();
   };
 
   private count(n: number): void {

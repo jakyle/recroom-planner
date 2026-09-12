@@ -135,6 +135,17 @@
     collab?.setViewport({ scale, cx, cy });
   });
 
+  let peerKey = '';
+  $effect(() => {
+    if (!collab) return;
+    const byId = new Map(members.map((m) => [m.user_id, m.display_name || 'Anonymous']));
+    const stale = [...collab.peers.values()].filter((p) => byId.get(p.userId) !== p.name);
+    const key = stale.map((p) => `${p.userId}:${p.name}`).join('|');
+    if (!key || key === peerKey) return;
+    peerKey = key;
+    void listMembers(projectId).then((m) => (members = m));
+  });
+
   function jumpTo(userId: string) {
     const v = collab?.peers.get(userId)?.viewport;
     if (v) viewport.centerOn(v.cx, v.cy, v.scale);

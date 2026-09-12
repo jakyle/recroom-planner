@@ -59,7 +59,7 @@ test('runbook: create, join edit/view, members, rotate, fork, promote', async ({
   await expect(rows).toHaveCount(2);
   await viewer.goto('./');
   await viewer.goto(owner.url());
-  await expect(viewer.getByTestId('error')).toContainText('not a member');
+  await expect(viewer.getByTestId('error')).toContainText('not on this plan');
 
   // 6. rotate edit link; old link invalid
   await owner.getByTestId('rotate-edit').click();
@@ -75,6 +75,6 @@ test('runbook: create, join edit/view, members, rotate, fork, promote', async ({
   await expect(owner.getByTestId('scenario-link')).toHaveCount(2);
   const forked = owner.getByTestId('scenario-link').filter({ hasText: 'Copy of Base' });
   await expect(forked).toHaveCount(1);
-  await owner.getByRole('button', { name: 'Promote' }).click();
+  await owner.getByRole('button', { name: 'Make primary' }).click();
   await expect(forked.locator('xpath=..')).toContainText('★ primary');
 });

@@ -14,7 +14,7 @@ Read this first, then `.claude/napkin.md`, then ONLY the spec section named unde
 
 - Platform is locked: GitHub Pages static + Supabase free tier; Svelte 5 + Vite + SVG canvas; jsPDF + svg2pdf for vector PDF (SPEC §2). Do not relitigate.
 - **Sharing is by link, not allowlist** — the prompt file's "3-email allowlist" was reversed by the user in this session. View link + edit link, anonymous sign-in + `claim_share_link` RPC → `project_members` row; RLS is membership-based (SPEC §3, §19.3).
-- The sketch is transcribed in SPEC §5 with wall names A/B/C/D and the coordinate origin at the A/C corner; window-wall marks are 12 windows (35-3/8"×59-1/4", sill ≈1'); the 28–34' box on Wall B is a **fireplace**, flush; the stepped block at the 0-ft end is an **existing utility room to be demolished**; "add a wall / add a door" is the walls feature, not a plan item.
+- The sketch is transcribed in SPEC §5 with wall names A/B/C/D and the coordinate origin at the A/C corner; window-wall marks are 12 windows (nominal 3'×5', sill ≈1'); the 28–34' box on Wall B is a **fireplace**, flush; the stepped block at the 0-ft end is an **existing utility room to be demolished**; "add a wall / add a door" is the walls feature, not a plan item.
 - Sauna, bar, bathroom are OUT. Program = furniture, pool table (custom object later), gym equipment, mounted TV, rugs, modular islands. Presets stay (SPEC §13.1) but nothing is pre-placed.
 - Conflict rules §12.1–§12.9 were confirmed verbatim by the user (2026-09-12).
 - Comments anchor to **both** point and object (§17). Grid toggle + three snap modes (§6). Openings snap into walls in 2.5D and elevations are editable (§8).

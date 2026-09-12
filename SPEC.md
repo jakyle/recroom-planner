@@ -217,7 +217,7 @@ This section is the citable transcription of the hand sketch. Everything here is
 
 ### §5.2 Wall A (x=0, y 0→63') — window wall
 
-- **R5.3** Twelve windows, unit **American Craftsman 50 Series single-hung, 35-3/8" W × 59-1/4" H** (confirmed), centers at y ≈ 4', 9', 14', 19', 24', 29', 34', 39', 44', 49', 54', 59' [UNVERIFIED ±1'], sill **≈ 1'-0"** (user estimate, editable), head ≈ 5'-11¼".
+- **R5.3** Twelve windows, **nominal 3'-0" × 5'-0" (36" × 60") single-hung** (confirmed by the user; the referenced American Craftsman 50 Series unit measures 35-3/8" × 59-1/4"), centers at y ≈ 4', 9', 14', 19', 24', 29', 34', 39', 44', 49', 54', 59' [UNVERIFIED ±1'], sill **≈ 1'-0"** (user estimate, editable), head ≈ 6'-0".
 
 ### §5.3 Wall B (x=29', y 0→63') — door wall
 
@@ -345,7 +345,7 @@ This section is the citable transcription of the hand sketch. Everything here is
 
 ### §9.4 Openings
 
-- **R9.6** Opening tool: click a wall to place a door (3'-0" single / 6'-0" double / 8'-0" slider / cased opening) or window (default = the project's window unit 35-3/8"×59-1/4", sill 1'-0"); standard sizes are defaults, all fields editable per §4.6.
+- **R9.6** Opening tool: click a wall to place a door (3'-0" single / 6'-0" double / 8'-0" slider / cased opening) or window (default = the project's window unit 36"×60", sill 1'-0"); standard sizes are defaults, all fields editable per §4.6.
 - **R9.7** Openings slide along their wall, show swing arcs (doors) and sill/head labels (windows); door swing arcs are derived halos for rule §12.2.
 - **R9.8** Openings cannot be placed on `demo` walls; demolishing a wall dims its openings.
 

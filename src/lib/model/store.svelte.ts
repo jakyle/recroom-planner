@@ -1,0 +1,396 @@
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import type { Repo, ScenarioData } from '../supabase/repo';
+import type { Batch, GroupRow, LayerRow, Mount, ObjectRow, Op, OpeningRow, Row, SlabRow, TableName, WallRow } from './types';
+import { defaultZ } from './types';
+
+export type LayerUi = { visible: boolean; opacity: number };
+export type SelectMode = 'replace' | 'toggle' | 'add';
+
+const newId = (): string =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+      });
+
+/**
+ * The open scenario as reactive maps plus the commit pipeline (R2.12, R7.10, R15.6, R15.11).
+ * Every mutation is a Batch of ops: applied locally first, recorded for undo, then written through the repo.
+ */
+export class DocumentStore {
+  projectId = $state('');
+  scenarioId = $state('');
+  loading = $state(false);
+  error = $state('');
+
+  layers = new SvelteMap<string, LayerRow>();
+  walls = new SvelteMap<string, WallRow>();
+  openings = new SvelteMap<string, OpeningRow>();
+  objects = new SvelteMap<string, ObjectRow>();
+  groups = new SvelteMap<string, GroupRow>();
+  demoWalls = new SvelteSet<string>();
+  slab = $state<SlabRow | null>(null);
+
+  selection = new SvelteSet<string>();
+  activeLayerId = $state<string | null>(null);
+  layerUi = new SvelteMap<string, LayerUi>();
+  unsynced = new SvelteSet<string>();
+
+  undoStack = $state<Batch[]>([]);
+  redoStack = $state<Batch[]>([]);
+  pendingWrites = $state(0);
+
+  constructor(private repo: Repo) {}
+
+  async load(projectId: string, scenarioId: string): Promise<void> {
+    this.loading = true;
+    this.error = '';
+    this.projectId = projectId;
+    this.scenarioId = scenarioId;
+    try {
+      const data = await this.repo.load(projectId, scenarioId);
+      this.ingest(data);
+      this.undoStack = [];
+      this.redoStack = [];
+      this.selection.clear();
+      this.restoreLayerUi();
+      if (!this.activeLayerId || !this.layers.has(this.activeLayerId)) {
+        const furnishing = [...this.layers.values()].find((l) => l.key === 'furnishing');
+        this.activeLayerId = furnishing?.id ?? [...this.layers.keys()][0] ?? null;
+      }
+    } catch (e) {
+      this.error = String((e as Error).message ?? e);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  ingest(data: ScenarioData): void {
+    this.layers.clear();
+    this.walls.clear();
+    this.openings.clear();
+    this.objects.clear();
+    this.groups.clear();
+    this.demoWalls.clear();
+    for (const l of data.layers) this.layers.set(l.id as string, l as LayerRow);
+    for (const w of data.walls) this.walls.set(w.id as string, w as WallRow);
+    for (const o of data.openings) this.openings.set(o.id as string, o as OpeningRow);
+    for (const o of data.objects) this.objects.set(o.id as string, o as ObjectRow);
+    for (const g of data.groups) this.groups.set(g.id as string, g as GroupRow);
+    for (const s of data.wallStates) this.demoWalls.add(s.wall_id as string);
+    this.slab = (data.slab as SlabRow | null) ?? null;
+  }
+
+  private layerUiKey(): string {
+    return `rr.layers.${this.projectId}`;
+  }
+
+  private restoreLayerUi(): void {
+    let saved: Record<string, LayerUi> = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(this.layerUiKey()) ?? '{}');
+    } catch {
+      saved = {};
+    }
+    this.layerUi.clear();
+    for (const id of this.layers.keys()) this.layerUi.set(id, saved[id] ?? { visible: true, opacity: 1 });
+  }
+
+  private persistLayerUi(): void {
+    try {
+      localStorage.setItem(this.layerUiKey(), JSON.stringify(Object.fromEntries(this.layerUi)));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  setLayerVisible(id: string, visible: boolean): void {
+    const ui = this.layerUi.get(id) ?? { visible: true, opacity: 1 };
+    this.layerUi.set(id, { ...ui, visible });
+    this.persistLayerUi();
+  }
+
+  setLayerOpacity(id: string, opacity: number): void {
+    const ui = this.layerUi.get(id) ?? { visible: true, opacity: 1 };
+    this.layerUi.set(id, { ...ui, opacity });
+    this.persistLayerUi();
+  }
+
+  /** Alt-click the eye: show only this layer (R7.19); calling again on the solo layer restores all. */
+  soloLayer(id: string): void {
+    const others = [...this.layers.keys()].filter((k) => k !== id);
+    const alreadySolo = others.every((k) => !(this.layerUi.get(k)?.visible ?? true)) && (this.layerUi.get(id)?.visible ?? true);
+    for (const k of this.layers.keys()) this.setLayerVisible(k, alreadySolo ? true : k === id);
+  }
+
+  applyVisibilityPreset(keys: string[] | null): void {
+    for (const l of this.layers.values()) this.setLayerVisible(l.id, keys === null ? true : keys.includes(l.key));
+  }
+
+  isLayerVisible(id: string): boolean {
+    return this.layerUi.get(id)?.visible ?? true;
+  }
+
+  isLayerLocked(id: string): boolean {
+    return this.layers.get(id)?.locked ?? false;
+  }
+
+  layerOpacity(id: string): number {
+    return this.layerUi.get(id)?.opacity ?? 1;
+  }
+
+  select(ids: string[], mode: SelectMode = 'replace'): void {
+    const expanded = this.expandGroups(ids);
+    if (mode === 'replace') {
+      this.selection.clear();
+      for (const id of expanded) this.selection.add(id);
+    } else if (mode === 'add') {
+      for (const id of expanded) this.selection.add(id);
+    } else {
+      for (const id of expanded) if (this.selection.has(id)) this.selection.delete(id); else this.selection.add(id);
+    }
+  }
+
+  clearSelection(): void {
+    this.selection.clear();
+  }
+
+  /** Grouped objects select together (R7.21). */
+  private expandGroups(ids: string[]): string[] {
+    const out = new Set(ids);
+    for (const id of ids) {
+      const g = this.objects.get(id)?.group_id;
+      if (g) for (const o of this.objects.values()) if (o.group_id === g) out.add(o.id);
+    }
+    return [...out];
+  }
+
+  selectedObjects(): ObjectRow[] {
+    return [...this.selection].map((id) => this.objects.get(id)).filter((o): o is ObjectRow => !!o);
+  }
+
+  /** Objects that can be hit on the canvas: layer visible and not locked, object not locked. */
+  isInteractive(o: ObjectRow): boolean {
+    return this.isLayerVisible(o.layer_id) && !this.isLayerLocked(o.layer_id) && !o.locked;
+  }
+
+  private table(name: TableName): SvelteMap<string, Row> {
+    const map = {
+      objects: this.objects,
+      object_groups: this.groups,
+      walls: this.walls,
+      openings: this.openings,
+      layers: this.layers,
+    }[name as Exclude<TableName, 'scenario_wall_states' | 'slabs'>];
+    return map as unknown as SvelteMap<string, Row>;
+  }
+
+  applyLocal(op: Op): void {
+    if (op.table === 'slabs') {
+      if (op.type === 'delete') this.slab = null;
+      else this.slab = { ...(this.slab ?? {}), ...(op.type === 'create' ? op.row : op.after) } as SlabRow;
+      return;
+    }
+    if (op.table === 'scenario_wall_states') {
+      const wallId = (op.type === 'create' ? op.row.wall_id : op.type === 'delete' ? op.row.wall_id : op.after.wall_id) as string;
+      if (op.type === 'delete') this.demoWalls.delete(wallId);
+      else this.demoWalls.add(wallId);
+      return;
+    }
+    const map = this.table(op.table);
+    if (op.type === 'create') map.set(op.row.id as string, op.row);
+    else if (op.type === 'delete') map.delete(op.id);
+    else {
+      const cur = map.get(op.id);
+      if (cur) map.set(op.id, { ...cur, ...op.after });
+    }
+  }
+
+  static inverse(op: Op): Op {
+    if (op.type === 'create') return { type: 'delete', table: op.table, id: op.row.id as string, row: op.row };
+    if (op.type === 'delete') return { type: 'create', table: op.table, row: op.row };
+    return { type: 'update', table: op.table, id: op.id, before: op.after, after: op.before };
+  }
+
+  private async write(op: Op): Promise<void> {
+    if (op.table === 'scenario_wall_states') {
+      if (op.type === 'delete') await this.repo.removeWallState(this.scenarioId, op.row.wall_id as string);
+      else await this.repo.insert('scenario_wall_states', op.type === 'create' ? op.row : op.after);
+      return;
+    }
+    if (op.type === 'create') {
+      const stored = await this.repo.insert(op.table, op.row);
+      if (op.table === 'slabs') this.slab = stored as SlabRow;
+      else {
+        const map = this.table(op.table);
+        const cur = map.get(op.row.id as string);
+        if (cur) map.set(op.row.id as string, { ...cur, ...stored });
+      }
+    } else if (op.type === 'update') {
+      const stored = await this.repo.update(op.table, op.id, op.after);
+      if (op.table === 'slabs') this.slab = { ...(this.slab ?? {}), ...stored } as SlabRow;
+      else {
+        const map = this.table(op.table);
+        const cur = map.get(op.id);
+        if (cur) map.set(op.id, { ...cur, version: stored.version, updated_at: stored.updated_at, updated_by: stored.updated_by });
+      }
+    } else {
+      await this.repo.remove(op.table, op.id);
+    }
+  }
+
+  /** Apply locally, record for undo, then persist. Never awaits before the local apply (R7.10). */
+  async commit(batch: Batch, record = true): Promise<void> {
+    if (batch.ops.length === 0) return;
+    for (const op of batch.ops) this.applyLocal(op);
+    if (record) {
+      this.undoStack = [...this.undoStack, batch];
+      this.redoStack = [];
+    }
+    this.pendingWrites += batch.ops.length;
+    for (const op of batch.ops) {
+      const id = op.type === 'create' ? (op.row.id as string) : op.id;
+      try {
+        await this.write(op);
+        this.unsynced.delete(id);
+      } catch (e) {
+        this.unsynced.add(id);
+        this.error = `Save failed: ${String((e as Error).message ?? e)}`;
+      } finally {
+        this.pendingWrites -= 1;
+      }
+    }
+  }
+
+  async undo(): Promise<void> {
+    const batch = this.undoStack.at(-1);
+    if (!batch) return;
+    this.undoStack = this.undoStack.slice(0, -1);
+    const inverse: Batch = { label: `undo ${batch.label}`, ops: [...batch.ops].reverse().map(DocumentStore.inverse) };
+    this.redoStack = [...this.redoStack, batch];
+    await this.commit(inverse, false);
+  }
+
+  async redo(): Promise<void> {
+    const batch = this.redoStack.at(-1);
+    if (!batch) return;
+    this.redoStack = this.redoStack.slice(0, -1);
+    this.undoStack = [...this.undoStack, batch];
+    await this.commit(batch, false);
+  }
+
+  newObject(init: Partial<ObjectRow> & { w: number; d: number; h: number }): ObjectRow {
+    const layerId = init.layer_id ?? this.activeLayerId ?? [...this.layers.keys()][0];
+    const mount = (init.mount ?? 'floor') as Mount;
+    const zOrder = Math.max(0, ...[...this.objects.values()].map((o) => o.z_order)) + 1;
+    return {
+      id: init.id ?? newId(),
+      scenario_id: this.scenarioId,
+      layer_id: layerId,
+      preset_id: init.preset_id ?? null,
+      name: init.name ?? 'Object',
+      x: init.x ?? 0,
+      y: init.y ?? 0,
+      z: init.z ?? defaultZ(mount, init.h),
+      w: init.w,
+      d: init.d,
+      h: init.h,
+      rot: init.rot ?? 0,
+      mount,
+      wall_id: init.wall_id ?? null,
+      group_id: init.group_id ?? null,
+      z_order: init.z_order ?? zOrder,
+      tags: init.tags ?? [],
+      image_path: init.image_path ?? null,
+      halo: init.halo ?? null,
+      locked: init.locked ?? false,
+      props: init.props ?? {},
+      version: 1,
+      updated_at: new Date().toISOString(),
+      updated_by: null,
+    };
+  }
+
+  createObjects(rows: ObjectRow[], label = 'add'): Promise<void> {
+    return this.commit({ label, ops: rows.map((row) => ({ type: 'create', table: 'objects', row: row as unknown as Row })) });
+  }
+
+  updateObjects(ids: string[], patch: (o: ObjectRow) => Partial<ObjectRow>, label = 'edit'): Promise<void> {
+    const ops: Op[] = [];
+    for (const id of ids) {
+      const cur = this.objects.get(id);
+      if (!cur) continue;
+      const after = patch(cur) as Row;
+      const before: Row = {};
+      for (const k of Object.keys(after)) before[k] = (cur as unknown as Row)[k];
+      const changed = Object.keys(after).some((k) => JSON.stringify(after[k]) !== JSON.stringify(before[k]));
+      if (changed) ops.push({ type: 'update', table: 'objects', id, before, after });
+    }
+    return this.commit({ label, ops });
+  }
+
+  deleteObjects(ids: string[], label = 'delete'): Promise<void> {
+    const ops: Op[] = [];
+    for (const id of ids) {
+      const cur = this.objects.get(id);
+      if (cur) ops.push({ type: 'delete', table: 'objects', id, row: cur as unknown as Row });
+      this.selection.delete(id);
+    }
+    return this.commit({ label, ops });
+  }
+
+  async duplicateObjects(ids: string[], offset = 12): Promise<string[]> {
+    const rows: ObjectRow[] = [];
+    for (const id of ids) {
+      const cur = this.objects.get(id);
+      if (!cur) continue;
+      rows.push(this.newObject({ ...cur, id: newId(), x: cur.x + offset, y: cur.y + offset, group_id: null, z_order: undefined }));
+    }
+    await this.createObjects(rows, 'duplicate');
+    this.select(rows.map((r) => r.id));
+    return rows.map((r) => r.id);
+  }
+
+  async groupSelected(name = ''): Promise<void> {
+    const ids = [...this.selection];
+    if (ids.length < 2) return;
+    const group: Row = { id: newId(), scenario_id: this.scenarioId, name, version: 1 };
+    const ops: Op[] = [{ type: 'create', table: 'object_groups', row: group }];
+    for (const id of ids) {
+      const cur = this.objects.get(id);
+      if (cur) ops.push({ type: 'update', table: 'objects', id, before: { group_id: cur.group_id }, after: { group_id: group.id } });
+    }
+    await this.commit({ label: 'group', ops });
+  }
+
+  async ungroupSelected(): Promise<void> {
+    const groupIds = new Set([...this.selection].map((id) => this.objects.get(id)?.group_id).filter((g): g is string => !!g));
+    const ops: Op[] = [];
+    for (const o of this.objects.values())
+      if (o.group_id && groupIds.has(o.group_id)) ops.push({ type: 'update', table: 'objects', id: o.id, before: { group_id: o.group_id }, after: { group_id: null } });
+    for (const g of groupIds) {
+      const row = this.groups.get(g);
+      if (row) ops.push({ type: 'delete', table: 'object_groups', id: g, row: row as unknown as Row });
+    }
+    await this.commit({ label: 'ungroup', ops });
+  }
+
+  reorder(ids: string[], where: 'front' | 'back'): Promise<void> {
+    const all = [...this.objects.values()].map((o) => o.z_order);
+    const base = where === 'front' ? Math.max(0, ...all) + 1 : Math.min(0, ...all) - ids.length;
+    return this.updateObjects(ids, (o) => ({ z_order: base + ids.indexOf(o.id) }), where === 'front' ? 'bring to front' : 'send to back');
+  }
+
+  setLayerLocked(id: string, locked: boolean): Promise<void> {
+    const cur = this.layers.get(id);
+    if (!cur) return Promise.resolve();
+    return this.commit({ label: locked ? 'lock layer' : 'unlock layer', ops: [{ type: 'update', table: 'layers', id, before: { locked: cur.locked }, after: { locked } }] });
+  }
+
+  /** Objects sorted for rendering: by layer sort, then z_order. */
+  orderedObjects(): ObjectRow[] {
+    const sortOf = (id: string) => this.layers.get(id)?.sort ?? 0;
+    return [...this.objects.values()].sort((a, b) => sortOf(a.layer_id) - sortOf(b.layer_id) || a.z_order - b.z_order);
+  }
+}

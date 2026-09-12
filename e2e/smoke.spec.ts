@@ -4,11 +4,16 @@ import { test, expect, type Page } from '@playwright/test';
 
 test.use({ testIdAttribute: 'data-test' });
 
+async function projectTab(page: Page) {
+  await page.getByTestId('tab-project').click();
+}
+
 async function join(page: Page, link: string, name: string) {
   await page.goto(link);
   await page.getByTestId('display-name').fill(name);
   await page.getByTestId('save-name').click();
   await expect(page.getByTestId('my-name')).toHaveText(name);
+  await projectTab(page);
 }
 
 test('runbook: create, join edit/view, members, rotate, fork, promote', async ({ browser }) => {
@@ -23,6 +28,7 @@ test('runbook: create, join edit/view, members, rotate, fork, promote', async ({
   await owner.getByTestId('display-name').fill('Owner');
   await owner.getByTestId('save-name').click();
   await expect(owner.getByTestId('my-access')).toHaveText('owner');
+  await projectTab(owner);
   await owner.waitForURL(/#\/p\/[^/]+\/s\/[^/]+$/);
   const editLink = (await owner.getByTestId('edit-link').getAttribute('data-url'))!;
   const viewLink = (await owner.getByTestId('view-link').getAttribute('data-url'))!;
@@ -48,6 +54,7 @@ test('runbook: create, join edit/view, members, rotate, fork, promote', async ({
 
   // 5. members panel: three rows; demote editor to view and back; remove viewer
   await owner.reload();
+  await projectTab(owner);
   const rows = owner.getByTestId('member-row');
   await expect(rows).toHaveCount(3);
   const editorRow = rows.filter({ hasText: 'Editor' });

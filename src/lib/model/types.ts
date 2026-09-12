@@ -60,3 +60,10 @@ export function defaultZ(mount: Mount, h: number, ceiling = 112): number {
       return 0;
   }
 }
+
+export type Json = Database['public']['Tables']['objects']['Row']['props'];
+
+/** Merge into an object's props JSON with the DB's Json typing. */
+export function mergeProps(o: ObjectRow, patch: Partial<ObjectProps>): Json {
+  return { ...propsOf(o), ...patch } as unknown as Json;
+}

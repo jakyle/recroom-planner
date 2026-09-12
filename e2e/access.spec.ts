@@ -6,11 +6,16 @@ type Hooks = {
   rotateShareLink: (id: string, kind: 'view' | 'edit') => Promise<string>;
 };
 
+async function projectTab(page: Page) {
+  await page.getByTestId('tab-project').click();
+}
+
 async function join(page: Page, link: string, name: string) {
   await page.goto(link);
   await page.getByTestId('display-name').fill(name);
   await page.getByTestId('save-name').click();
   await expect(page.getByTestId('my-name')).toHaveText(name);
+  await projectTab(page);
 }
 
 test.use({ testIdAttribute: 'data-test' });
@@ -24,6 +29,7 @@ test('owner creates, editor and viewer join, viewer cannot write', async ({ brow
   await owner.getByTestId('display-name').fill('Owner');
   await owner.getByTestId('save-name').click();
   await expect(owner.getByTestId('my-access')).toHaveText('owner');
+  await projectTab(owner);
   await expect(owner.getByTestId('scenario-link')).toHaveCount(1);
   await owner.waitForURL(/#\/p\/[^/]+\/s\/[^/]+$/);
 
@@ -90,6 +96,7 @@ test('owner creates, editor and viewer join, viewer cannot write', async ({ brow
 
   // Owner sees three members and the editor's rename.
   await owner.reload();
+  await projectTab(owner);
   await expect(owner.getByTestId('member-row')).toHaveCount(3);
   await expect(owner.getByTestId('scenario-link')).toHaveText('Renamed by editor');
 

@@ -14,12 +14,25 @@
     type MemberRow,
   } from '../lib/supabase/members';
   import { listScenarios, forkScenario, promoteScenario, type ScenarioRow } from '../lib/supabase/scenarios';
+  import { supabaseRepo } from '../lib/supabase/repo';
   import { joinUrl, readTokens, stashTokens, type TokenPair } from '../lib/share';
   import { navigate } from '../lib/router';
+  import { DocumentStore } from '../lib/model/store.svelte';
+  import { Viewport } from '../lib/canvas/viewport.svelte';
+  import { CanvasUi } from '../lib/canvas/ui.svelte';
+  import { handleKeyDown, handleKeyUp, SHORTCUTS } from '../lib/canvas/keys';
+  import Plan from '../lib/canvas/Plan.svelte';
   import TitleBlock from '../lib/ui/TitleBlock.svelte';
   import StatusStrip from '../lib/ui/StatusStrip.svelte';
   import Panel from '../lib/ui/Panel.svelte';
   import Avatar from '../lib/ui/Avatar.svelte';
+  import ToolRail from '../lib/ui/ToolRail.svelte';
+  import LayersPanel from '../lib/ui/LayersPanel.svelte';
+  import Inspector from '../lib/ui/Inspector.svelte';
+  import ObjectsPanel from '../lib/ui/ObjectsPanel.svelte';
+  import HoverCard from '../lib/ui/HoverCard.svelte';
+  import ContextMenu from '../lib/ui/ContextMenu.svelte';
+  import ObjectDialog from '../lib/ui/ObjectDialog.svelte';
 
   let { projectId, scenarioId }: { projectId: string; scenarioId: string | null } = $props();
 
@@ -34,14 +47,43 @@
   let googleDismissed = $state(false);
   let copied = $state('');
   let tokens = $state<TokenPair | null>(null);
+  let dockTab = $state<'plan' | 'project'>('plan');
+  let showHelp = $state(false);
+  let plan = $state<Plan | null>(null);
+
+  const store = new DocumentStore(supabaseRepo);
+  const viewport = new Viewport();
+  const ui = new CanvasUi();
 
   const isOwner = $derived(me?.access === 'owner');
   const canEdit = $derived(me?.access === 'owner' || me?.access === 'edit');
   const current = $derived(scenarios.find((s) => s.id === scenarioId) ?? null);
   const kinds = ['view', 'edit'] as const;
-  const tools = ['⌖', '⤡', '▭', '⌐', '⟋', '✎', '⊕', '💬'];
 
-  onMount(load);
+  onMount(() => {
+    void load();
+    const down = (e: KeyboardEvent) =>
+      handleKeyDown(e, {
+        store,
+        ui,
+        viewport,
+        canEdit,
+        selectTool: () => plan!.selectTool(),
+        objectsAt: (p) => plan?.objectsAt(p) ?? [],
+        fit: () => plan?.fit(),
+      });
+    const up = (e: KeyboardEvent) => handleKeyUp(e, ui);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  });
+
+  $effect(() => {
+    if (scenarioId && me && store.scenarioId !== scenarioId) void store.load(projectId, scenarioId);
+  });
 
   async function load() {
     error = '';
@@ -156,6 +198,9 @@
       {/snippet}
       {#snippet actions()}
         <span class={`chip chip--${me?.access}`} data-test="my-access">{me?.access}</span>
+        <button class="btn btn--quiet btn--sm" title="Undo (Ctrl+Z)" disabled={!canEdit || store.undoStack.length === 0} onclick={() => store.undo()}>↶</button>
+        <button class="btn btn--quiet btn--sm" title="Redo (Ctrl+Shift+Z)" disabled={!canEdit || store.redoStack.length === 0} onclick={() => store.redo()}>↷</button>
+        <button class="btn btn--quiet btn--sm" title="Shortcuts (?)" onclick={() => (showHelp = !showHelp)}>?</button>
         {#if canEdit && current}<button class="btn btn--sm" data-test="fork" onclick={fork}>Fork</button>{/if}
       {/snippet}
     </TitleBlock>
@@ -168,20 +213,20 @@
           <button class="btn btn--sm btn--quiet" onclick={() => (googleDismissed = true)}>Later</button>
         </div>
       {/if}
+      {#if store.error}
+        <div class="banner" data-test="store-error"><span class="error">{store.error}</span><button class="btn btn--sm btn--quiet" onclick={() => (store.error = '')}>Dismiss</button></div>
+      {/if}
     </div>
 
     <div class="shell__main">
-      <nav class="rail" aria-label="Tools (plan view arrives in P1)">
-        {#each tools as t, i (t)}
-          <span class={`rail__tool ${i === 0 ? 'rail__tool--active' : ''}`} aria-hidden="true">{t}</span>
-        {/each}
-      </nav>
+      <ToolRail {ui} {canEdit} />
 
-      <div class="paper">
-        <div class="paper__note">
-          <strong>{current?.name ?? project.name}</strong>
-          63'-0" × 29'-0" · plan view arrives in Phase P1
-        </div>
+      <div class="paper paper--canvas">
+        {#if scenarioId && !store.loading && store.scenarioId === scenarioId}
+          <Plan bind:this={plan} {store} {viewport} {ui} {canEdit} />
+        {:else}
+          <div class="paper__note"><strong>{current?.name ?? project.name}</strong>loading plan…</div>
+        {/if}
         {#if !me.display_name}
           <div class="paper__overlay">
             <section class="card modal" data-test="name-dialog">
@@ -195,72 +240,98 @@
             </section>
           </div>
         {/if}
+        {#if showHelp}
+          <div class="paper__overlay" role="presentation" onpointerdown={() => (showHelp = false)}>
+            <div class="card modal" role="dialog" aria-label="Shortcuts" tabindex="-1" onpointerdown={(e) => e.stopPropagation()}>
+              <div class="card__body">
+                <span class="label">Shortcuts</span>
+                <table class="tbl">
+                  <tbody>{#each SHORTCUTS as [k, v] (k)}<tr><td class="mono">{k}</td><td>{v}</td></tr>{/each}</tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <aside class="dock">
-        <Panel title="Scenarios" testId="scenarios-panel">
-          <ul class="list">
-            {#each scenarios.filter((s) => !s.archived) as s (s.id)}
-              <li class="list__item" aria-current={s.id === scenarioId}>
-                <a href={`#/p/${projectId}/s/${s.id}`} data-test="scenario-link">{s.name}</a>
-                {#if s.is_primary}
-                  <span class="star" title="Primary scenario (exports use this one)">★ primary</span>
-                {:else if canEdit}
-                  <button class="btn btn--quiet btn--sm" onclick={() => promote(s.id)}>Make primary</button>
-                {/if}
-              </li>
-            {/each}
-          </ul>
-        </Panel>
+        <div class="dock__tabs" role="tablist">
+          <button role="tab" class:active={dockTab === 'plan'} aria-selected={dockTab === 'plan'} data-test="tab-plan" onclick={() => (dockTab = 'plan')}>Plan</button>
+          <button role="tab" class:active={dockTab === 'project'} aria-selected={dockTab === 'project'} data-test="tab-project" onclick={() => (dockTab = 'project')}>Project</button>
+        </div>
 
-        {#if isOwner}
-          <Panel title="Share links" testId="share-panel">
-            {#each kinds as kind (kind)}
-              <div class="field">
-                <span class="label">{kind === 'view' ? 'View only' : 'Can edit'}</span>
-                <div class="linkbox">
-                  {#if tokens?.[kind]}
-                    <code data-test={`${kind}-link`} data-url={joinUrl(tokens[kind]!)}>{joinUrl(tokens[kind]!)}</code>
-                    <button class="btn btn--sm" onclick={() => copy(kind)}>{copied === kind ? 'Copied' : 'Copy'}</button>
-                  {:else}
-                    <code class="muted">Not on this browser. Rotate to get a new link.</code>
-                    <span></span>
+        {#if dockTab === 'plan'}
+          <Inspector {store} {canEdit} />
+          <LayersPanel {store} {canEdit} />
+          <ObjectsPanel {store} {viewport} {canEdit} />
+        {:else}
+          <Panel title="Scenarios" testId="scenarios-panel">
+            <ul class="list">
+              {#each scenarios.filter((s) => !s.archived) as s (s.id)}
+                <li class="list__item" aria-current={s.id === scenarioId}>
+                  <a href={`#/p/${projectId}/s/${s.id}`} data-test="scenario-link">{s.name}</a>
+                  {#if s.is_primary}
+                    <span class="star" title="Primary scenario (exports use this one)">★ primary</span>
+                  {:else if canEdit}
+                    <button class="btn btn--quiet btn--sm" onclick={() => promote(s.id)}>Make primary</button>
                   {/if}
-                  <button class="btn btn--sm btn--quiet" data-test={`rotate-${kind}`} onclick={() => rotate(kind)} title="Old link stops working">Rotate</button>
-                </div>
-              </div>
-            {/each}
+                </li>
+              {/each}
+            </ul>
           </Panel>
 
-          <Panel title="People" testId="members-panel">
-            <table class="tbl">
-              <thead><tr><th>Name</th><th>Access</th><th>Last seen</th><th></th></tr></thead>
-              <tbody>
-                {#each members as m (m.user_id)}
-                  <tr data-test="member-row">
-                    <td><span class="row"><Avatar name={m.display_name || '?'} color={m.color} /> {m.display_name || '(unnamed)'}</span></td>
-                    <td>
-                      {#if m.access === 'owner'}
-                        <span class="chip chip--owner">owner</span>
-                      {:else}
-                        <select class="select" value={m.access} onchange={(e) => changeAccess(m.user_id, (e.currentTarget as HTMLSelectElement).value as 'view' | 'edit')}>
-                          <option value="view">view</option>
-                          <option value="edit">edit</option>
-                        </select>
-                      {/if}
-                    </td>
-                    <td class="mono">{new Date(m.last_seen_at).toLocaleDateString(undefined, { month: 'short', day: '2-digit' })}</td>
-                    <td>{#if m.access !== 'owner'}<button class="btn btn--quiet btn--sm btn--danger" onclick={() => remove(m.user_id)}>Remove</button>{/if}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </Panel>
+          {#if isOwner}
+            <Panel title="Share links" testId="share-panel">
+              {#each kinds as kind (kind)}
+                <div class="field">
+                  <span class="label">{kind === 'view' ? 'View only' : 'Can edit'}</span>
+                  <div class="linkbox">
+                    {#if tokens?.[kind]}
+                      <code data-test={`${kind}-link`} data-url={joinUrl(tokens[kind]!)}>{joinUrl(tokens[kind]!)}</code>
+                      <button class="btn btn--sm" onclick={() => copy(kind)}>{copied === kind ? 'Copied' : 'Copy'}</button>
+                    {:else}
+                      <code class="muted">Not on this browser. Rotate to get a new link.</code>
+                      <span></span>
+                    {/if}
+                    <button class="btn btn--sm btn--quiet" data-test={`rotate-${kind}`} onclick={() => rotate(kind)} title="Old link stops working">Rotate</button>
+                  </div>
+                </div>
+              {/each}
+            </Panel>
+
+            <Panel title="People" testId="members-panel">
+              <table class="tbl">
+                <thead><tr><th>Name</th><th>Access</th><th>Last seen</th><th></th></tr></thead>
+                <tbody>
+                  {#each members as m (m.user_id)}
+                    <tr data-test="member-row">
+                      <td><span class="row"><Avatar name={m.display_name || '?'} color={m.color} /> {m.display_name || '(unnamed)'}</span></td>
+                      <td>
+                        {#if m.access === 'owner'}
+                          <span class="chip chip--owner">owner</span>
+                        {:else}
+                          <select class="select" value={m.access} onchange={(e) => changeAccess(m.user_id, (e.currentTarget as HTMLSelectElement).value as 'view' | 'edit')}>
+                            <option value="view">view</option>
+                            <option value="edit">edit</option>
+                          </select>
+                        {/if}
+                      </td>
+                      <td class="mono">{new Date(m.last_seen_at).toLocaleDateString(undefined, { month: 'short', day: '2-digit' })}</td>
+                      <td>{#if m.access !== 'owner'}<button class="btn btn--quiet btn--sm btn--danger" onclick={() => remove(m.user_id)}>Remove</button>{/if}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </Panel>
+          {/if}
         {/if}
       </aside>
     </div>
 
-    <StatusStrip live="online" access={me.access} />
+    <StatusStrip live="online" access={me.access} {ui} {viewport} {store} />
+    <HoverCard {store} {ui} />
+    <ContextMenu {store} {ui} {canEdit} />
+    <ObjectDialog {store} {ui} />
   </div>
 {:else}
   <div class="page">
@@ -271,3 +342,13 @@
     <StatusStrip live="connecting" />
   </div>
 {/if}
+
+<style>
+  .paper--canvas { background-image: none; }
+  .dock__tabs { display: flex; border-bottom: 1px solid var(--rule); }
+  .dock__tabs button {
+    flex: 1; background: none; border: 0; padding: 8px; cursor: pointer; font: 600 11px/1 var(--font-ui);
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); border-bottom: 2px solid transparent;
+  }
+  .dock__tabs button.active { color: var(--blueprint); border-bottom-color: var(--blueprint); }
+</style>

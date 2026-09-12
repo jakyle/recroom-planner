@@ -99,3 +99,15 @@ export function projectOnWall(w: WallSeg, p: Pt): { t: number; d: number } {
   const q = pointAlong(w, t);
   return { t, d: Math.hypot(p[0] - q[0], p[1] - q[1]) };
 }
+
+/** Place a w×d object with its back face on the wall at distance t along it, front facing the interior (R6.5). */
+export function mountOnWall(w: WallSeg, t: number, ow: number, od: number, insideSign: 1 | -1): { x: number; y: number; rot: number } {
+  const [nx, ny] = wallNormal(w);
+  const inX = nx * insideSign;
+  const inY = ny * insideSign;
+  const face = pointAlong(w, t);
+  const cx = face[0] + inX * (w.thickness / 2 + od / 2);
+  const cy = face[1] + inY * (w.thickness / 2 + od / 2);
+  const rot = (Math.atan2(-inX, inY) * 180) / Math.PI;
+  return { x: cx - ow / 2, y: cy - od / 2, rot: ((rot % 360) + 360) % 360 };
+}

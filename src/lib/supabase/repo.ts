@@ -22,17 +22,17 @@ export type ScenarioData = {
 
 export const supabaseRepo: Repo = {
   async insert(table, row) {
-    const { data, error } = await supabase.from(table).insert(row as never).select('*').single();
+    const { data, error } = await supabase.from(table as 'objects').insert(row as never).select('*').single();
     if (error) throw error;
     return data as Row;
   },
   async update(table, id, patch) {
-    const { data, error } = await supabase.from(table).update(patch as never).eq('id', id).select('*').single();
+    const { data, error } = await supabase.from(table as 'objects').update(patch as never).eq('id', id).select('*').single();
     if (error) throw error;
     return data as Row;
   },
   async remove(table, id) {
-    const { error } = await supabase.from(table).delete().eq('id', id);
+    const { error } = await supabase.from(table as 'objects').delete().eq('id', id);
     if (error) throw error;
   },
   async removeWallState(scenarioId, wallId) {
